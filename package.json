@@ -29,14 +29,31 @@
     "llm",
     "anthropic",
     "claude",
+    "cerebras",
+    "qwen",
     "bash",
     "ripgrep",
     "mcp",
     "model-context-protocol",
-    "sdk"
+    "sdk",
+    "context-finding",
+    "code-analysis"
   ],
-  "author": "",
-  "license": "MIT",
+  "author": "Swarm-Code",
+  "license": "AGPL-3.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Swarm-Code/ceregrep-client.git"
+  },
+  "homepage": "https://github.com/Swarm-Code/ceregrep-client#readme",
+  "bugs": {
+    "url": "https://github.com/Swarm-Code/ceregrep-client/issues"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
   "dependencies": {
     "@anthropic-ai/sdk": "^0.63.1",
     "@modelcontextprotocol/sdk": "^1.18.2",
