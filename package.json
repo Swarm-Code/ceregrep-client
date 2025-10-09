@@ -1,5 +1,5 @@
 {
-  "name": "@ceregrep/client",
+  "name": "ceregrep",
   "version": "0.1.0",
   "description": "Headless agent framework with Bash, Ripgrep, and MCP support - invocable via TypeScript SDK, Python SDK, and CLI",
   "type": "module",
