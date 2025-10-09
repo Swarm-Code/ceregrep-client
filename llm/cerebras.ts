@@ -211,8 +211,25 @@ export async function queryCerebras(
         },
       } as any,
     };
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error querying Cerebras API:', error);
+
+    // Try to extract error details from the response
+    if (error.response) {
+      console.error('Response status:', error.response.status);
+      console.error('Response data:', error.response.data);
+    }
+
+    // Log request params for debugging
+    console.error('Request params:', JSON.stringify({
+      model,
+      messageCount: apiMessages.length,
+      toolCount: apiTools.length,
+      temperature: options.temperature ?? 0.7,
+      top_p: options.top_p ?? 0.8,
+      max_tokens: 128000,
+    }, null, 2));
+
     throw error;
   }
 }
