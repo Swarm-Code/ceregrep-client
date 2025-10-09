@@ -142,14 +142,20 @@ export async function queryCerebras(
   const startTime = Date.now();
 
   try {
-    const response = await client.chat.completions.create({
+    const requestParams: any = {
       model,
       messages: apiMessages,
-      tools: apiTools.length > 0 ? apiTools : undefined,
-      temperature: options.temperature ?? 0.7, // Cerebras recommended
-      top_p: options.top_p ?? 0.8, // Cerebras recommended
-      max_tokens: 8192,
-    });
+      temperature: options.temperature ?? 0.7,
+      top_p: options.top_p ?? 0.8,
+      max_tokens: 128000, // 128k max tokens for Cerebras
+    };
+
+    // Only add tools if there are any
+    if (apiTools.length > 0) {
+      requestParams.tools = apiTools;
+    }
+
+    const response = await client.chat.completions.create(requestParams);
 
     const durationMs = Date.now() - startTime;
     const costUSD = response.usage ? calculateCost(response.usage) : 0;
