@@ -49,9 +49,32 @@ pip install -e .
 
 ## Usage
 
+### Using with uvx (Recommended)
+
+The easiest way to use ceregrep-mcp is with `uvx`, which runs the package without installation:
+
+```bash
+uvx ceregrep-mcp
+```
+
 ### Add to Claude Desktop
 
-Add this to your Claude Desktop MCP configuration (`~/Library/Application Support/Claude/claude_desktop_config.json` on macOS, `%APPDATA%\Claude\claude_desktop_config.json` on Windows):
+**Method 1: Using Claude MCP CLI (Easiest)**
+
+```bash
+claude mcp add ceregrep-mcp
+```
+
+This automatically adds ceregrep-mcp to your Claude Desktop configuration.
+
+**Method 2: Manual Configuration**
+
+Edit your Claude Desktop MCP configuration file:
+- **macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`
+- **Windows**: `%APPDATA%\Claude\claude_desktop_config.json`
+- **Linux**: `~/.config/Claude/claude_desktop_config.json`
+
+Add this configuration:
 
 ```json
 {
@@ -64,7 +87,7 @@ Add this to your Claude Desktop MCP configuration (`~/Library/Application Suppor
 }
 ```
 
-Or if you installed via pip:
+**If you installed via pip:**
 
 ```json
 {
@@ -76,9 +99,25 @@ Or if you installed via pip:
 }
 ```
 
-### Add to Ceregrep Itself
+### Add to Other MCP Clients
 
-You can even use ceregrep's own MCP client to connect to this server! Add to `.ceregrep.json`:
+For any MCP-compatible client, add to your `mcp.json` or equivalent config file:
+
+```json
+{
+  "mcpServers": {
+    "ceregrep": {
+      "command": "uvx",
+      "args": ["ceregrep-mcp"],
+      "env": {}
+    }
+  }
+}
+```
+
+### Add to Ceregrep Itself (Recursive Pattern)
+
+You can even use ceregrep's own MCP client to connect to this server! Add to `.ceregrep.json` or `~/.ceregrep.json`:
 
 ```json
 {

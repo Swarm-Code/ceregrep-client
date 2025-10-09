@@ -245,13 +245,23 @@ This creates a **recursive agent** pattern where agents can delegate complex con
 
 ### Quick Setup
 
-**Option 1: Using uvx (Recommended - No Installation Required)**
+**Prerequisites:**
+```bash
+# Install ceregrep CLI first
+npm install -g ceregrep
+```
+
+**Option 1: Using Claude MCP CLI (Easiest)**
 
 ```bash
-# Install ceregrep CLI
-npm install -g ceregrep
+claude mcp add ceregrep-mcp
+```
 
-# Add to Claude Desktop config
+**Option 2: Using uvx (No Installation Required)**
+
+Add to your Claude Desktop config (`~/Library/Application Support/Claude/claude_desktop_config.json`):
+
+```json
 {
   "mcpServers": {
     "ceregrep": {
@@ -262,15 +272,12 @@ npm install -g ceregrep
 }
 ```
 
-**Option 2: Install via pip**
+**Option 3: Install via pip**
 
 ```bash
-npm install -g ceregrep  # Install ceregrep CLI
-pip install ceregrep-mcp  # Install MCP server
-```
+pip install ceregrep-mcp
 
-Then add to Claude Desktop:
-```json
+# Then add to Claude Desktop:
 {
   "mcpServers": {
     "ceregrep": {
