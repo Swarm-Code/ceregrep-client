@@ -77,7 +77,12 @@ ceregrep config
 
 ## Configuration
 
-Create a `.ceregrep.json` or `.swarmrc` file in your project root or home directory.
+Ceregrep supports both global and project-specific configuration:
+
+- **Global config**: `~/.ceregrep.json` or `~/.swarmrc` (applies to all projects)
+- **Project config**: `.ceregrep.json` or `.swarmrc` in project directory (overrides global)
+
+Create a global config for system-wide defaults, or project configs to override settings per-project.
 
 ### Anthropic Claude (Default)
 
@@ -98,6 +103,27 @@ Create a `.ceregrep.json` or `.swarmrc` file in your project root or home direct
 ```
 
 ### Cerebras (Qwen 3 Coder 480B)
+
+**Global config** (recommended for Cerebras):
+
+```bash
+cat > ~/.ceregrep.json << 'EOF'
+{
+  "model": "qwen-3-coder-480b",
+  "provider": {
+    "type": "cerebras",
+    "apiKey": "csk-your-cerebras-api-key",
+    "baseURL": "https://api.cerebras.ai/v1",
+    "temperature": 0.7,
+    "top_p": 0.8
+  },
+  "verbose": true,
+  "debug": false
+}
+EOF
+```
+
+**Project config** (alternative):
 
 ```json
 {
