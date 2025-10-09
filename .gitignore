@@ -1,0 +1,22 @@
+node_modules/
+dist/
+*.log
+.env
+.DS_Store
+
+# Config files with secrets
+.ceregrep.json
+.swarmrc
+
+# Keep example
+!.ceregrep.example.json
+
+# Exclude conversation artifacts and debug folders
+.swarm/
+.mem/
+.mem-git/
+swarm-client/
+
+# Debug logs
+debug-*.log
+*.debug.log

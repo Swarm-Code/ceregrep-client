@@ -1,0 +1,227 @@
+# Ceregrep Client
+
+A modular, headless agent framework with support for Bash, Ripgrep, and MCP (Model Context Protocol). Can be invoked via TypeScript SDK, Python SDK, or CLI.
+
+## Features
+
+- **Headless Architecture**: No UI dependencies, pure SDK/CLI
+- **Modular Tools**: Bash execution, Ripgrep search, extensible via MCP
+- **Multiple Interfaces**: TypeScript SDK, Python SDK (planned), CLI
+- **Multi-Provider LLM**: Support for Anthropic Claude and Cerebras (Qwen 3 Coder 480B)
+- **MCP Support**: Connect to Model Context Protocol servers for additional tools
+- **Automatic Provider Routing**: Seamlessly switch between LLM providers via config
+
+## Installation
+
+### From npm (when published)
+
+```bash
+npm install @ceregrep/client
+```
+
+Or install globally for CLI usage:
+
+```bash
+npm install -g @ceregrep/client
+```
+
+### From source (development)
+
+```bash
+# Clone the repository
+git clone https://github.com/swarmcode/ceregrep-client.git
+cd ceregrep-client
+
+# Install dependencies
+npm install
+
+# Build
+npm run build
+
+# Install globally from source
+npm link
+```
+
+After running `npm link`, you can use the `ceregrep` command anywhere in your system.
+
+## Quick Start
+
+### TypeScript SDK
+
+```typescript
+import { CeregrepClient } from '@ceregrep/client';
+
+const client = new CeregrepClient({
+  model: 'claude-sonnet-4-20250514',
+  apiKey: process.env.ANTHROPIC_API_KEY,
+});
+
+// Query the agent
+const result = await client.query('List all TypeScript files in the current directory');
+
+console.log('Agent response:', result.messages);
+```
+
+### CLI
+
+```bash
+# Query the agent
+ceregrep query "List all TypeScript files"
+
+# List available tools
+ceregrep list-tools
+
+# Show configuration
+ceregrep config
+```
+
+## Configuration
+
+Create a `.ceregrep.json` or `.swarmrc` file in your project root or home directory.
+
+### Anthropic Claude (Default)
+
+```json
+{
+  "model": "claude-sonnet-4-20250514",
+  "apiKey": "your-anthropic-api-key",
+  "mcpServers": {
+    "filesystem": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-filesystem", "/path/to/directory"]
+    }
+  },
+  "verbose": false,
+  "debug": false
+}
+```
+
+### Cerebras (Qwen 3 Coder 480B)
+
+```json
+{
+  "model": "qwen-3-coder-480b",
+  "provider": {
+    "type": "cerebras",
+    "apiKey": "csk-your-cerebras-api-key",
+    "baseURL": "https://api.cerebras.ai/v1",
+    "temperature": 0.7,
+    "top_p": 0.8
+  },
+  "verbose": false,
+  "debug": false
+}
+```
+
+### Environment Variables
+
+You can also set API keys via environment variables:
+
+```bash
+# For Anthropic
+export ANTHROPIC_API_KEY=your-key-here
+
+# For Cerebras
+export CEREBRAS_API_KEY=your-key-here
+```
+
+## Available Tools
+
+### Built-in Tools
+
+- **Bash**: Execute shell commands in a persistent shell session
+- **Grep**: Search for patterns in files using ripgrep
+
+### MCP Tools
+
+Connect to any MCP server to extend functionality. Configure servers in `.ceregrep.json`:
+
+```json
+{
+  "mcpServers": {
+    "server-name": {
+      "type": "stdio",
+      "command": "node",
+      "args": ["path/to/server.js"]
+    }
+  }
+}
+```
+
+## API Reference
+
+### CeregrepClient
+
+```typescript
+class CeregrepClient {
+  constructor(options?: QueryOptions);
+
+  // Query the agent
+  async query(prompt: string, options?: QueryOptions): Promise<QueryResult>;
+
+  // Get conversation history
+  getHistory(): Message[];
+
+  // Clear history
+  clearHistory(): void;
+
+  // Compact history (summarize with LLM)
+  async compact(): Promise<void>;
+
+  // Set custom tools
+  setTools(tools: Tool[]): void;
+
+  // Set model
+  setModel(model: string): void;
+}
+```
+
+### QueryOptions
+
+```typescript
+interface QueryOptions {
+  model?: string;
+  apiKey?: string;
+  tools?: Tool[];
+  maxThinkingTokens?: number;
+  verbose?: boolean;
+  debug?: boolean;
+  dangerouslySkipPermissions?: boolean;
+}
+```
+
+## Architecture
+
+The framework consists of several modular components:
+
+- **Core**: Agent execution loop, message handling, tool interface
+- **Tools**: Bash, Grep, and tool registry
+- **LLM**: Anthropic client with tool formatting
+- **MCP**: Model Context Protocol integration
+- **Config**: Configuration loading and validation
+- **SDK**: TypeScript (and Python) client libraries
+- **CLI**: Command-line interface
+
+## Development
+
+```bash
+# Install dependencies
+npm install
+
+# Build
+npm run build
+
+# Development mode (watch)
+npm run dev
+```
+
+## Requirements
+
+- Node.js >= 18.0.0
+- Anthropic API key
+- ripgrep (rg) installed for Grep tool
+
+## License
+
+MIT
