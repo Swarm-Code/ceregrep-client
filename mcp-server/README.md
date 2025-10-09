@@ -1,5 +1,8 @@
 # Ceregrep MCP Server
 
+[![pypi version](https://img.shields.io/pypi/v/ceregrep-mcp.svg)](https://pypi.org/project/ceregrep-mcp/)
+[![license](https://img.shields.io/pypi/l/ceregrep-mcp.svg)](https://github.com/Swarm-Code/ceregrep-client/blob/master/LICENSE)
+
 MCP (Model Context Protocol) server that exposes ceregrep query capabilities to other agents.
 
 ## What is This?
@@ -17,48 +20,57 @@ This MCP server allows any MCP-compatible agent (like Claude Desktop) to use cer
 
 1. **Ceregrep CLI installed globally**:
    ```bash
-   cd /path/to/ceregrep-client
-   npm install
-   npm run build
-   npm link  # Install ceregrep command globally
+   npm install -g ceregrep
    ```
 
-2. **Python ≥ 3.10** and **uv** package manager:
-   ```bash
-   curl -LsSf https://astral.sh/uv/install.sh | sh
-   ```
+2. **Python ≥ 3.10** (for pip installation) or **uvx** (for no-install usage)
 
 ## Installation
 
-1. **Install dependencies**:
-   ```bash
-   cd mcp-server
-   uv sync
-   ```
+### Option 1: Using uvx (Recommended - No Installation Required)
 
-2. **Test the server**:
-   ```bash
-   uv run python mcp_server.py
-   ```
+```bash
+# No installation needed! Just use uvx to run it
+uvx ceregrep-mcp
+```
+
+### Option 2: Install via pip
+
+```bash
+pip install ceregrep-mcp
+```
+
+### Option 3: Install from source (Development)
+
+```bash
+cd mcp-server
+pip install -e .
+```
 
 ## Usage
 
 ### Add to Claude Desktop
 
-Add this to your Claude Desktop MCP configuration (`~/Library/Application Support/Claude/claude_desktop_config.json` on macOS):
+Add this to your Claude Desktop MCP configuration (`~/Library/Application Support/Claude/claude_desktop_config.json` on macOS, `%APPDATA%\Claude\claude_desktop_config.json` on Windows):
 
 ```json
 {
   "mcpServers": {
     "ceregrep": {
-      "command": "uv",
-      "args": [
-        "run",
-        "--directory",
-        "/path/to/ceregrep-client/mcp-server",
-        "python",
-        "mcp_server.py"
-      ]
+      "command": "uvx",
+      "args": ["ceregrep-mcp"]
+    }
+  }
+}
+```
+
+Or if you installed via pip:
+
+```json
+{
+  "mcpServers": {
+    "ceregrep": {
+      "command": "ceregrep-mcp"
     }
   }
 }
@@ -73,14 +85,8 @@ You can even use ceregrep's own MCP client to connect to this server! Add to `.c
   "mcpServers": {
     "ceregrep-context": {
       "type": "stdio",
-      "command": "uv",
-      "args": [
-        "run",
-        "--directory",
-        "/path/to/ceregrep-client/mcp-server",
-        "python",
-        "mcp_server.py"
-      ]
+      "command": "uvx",
+      "args": ["ceregrep-mcp"]
     }
   }
 }
@@ -172,4 +178,4 @@ Ensure API keys are set:
 
 ## License
 
-MIT
+AGPL-3.0-or-later

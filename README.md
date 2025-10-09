@@ -235,7 +235,7 @@ The framework consists of several modular components:
 
 ## MCP Server
 
-Ceregrep can also be exposed as an **MCP server**, allowing other agents to use it as a tool for querying and analyzing codebases.
+Ceregrep can also be exposed as an **MCP server**, allowing other agents to use it as a tool for querying and analyzing codebases. **Now available on PyPI!**
 
 ### What is the MCP Server?
 
@@ -243,36 +243,42 @@ The MCP server (`mcp-server/`) turns ceregrep into a context-finding tool that o
 
 This creates a **recursive agent** pattern where agents can delegate complex context-finding to specialized sub-agents.
 
-### Setup MCP Server
+### Quick Setup
 
-1. **Install ceregrep globally** (required):
-   ```bash
-   npm link
-   ```
+**Option 1: Using uvx (Recommended - No Installation Required)**
 
-2. **Install Python dependencies**:
-   ```bash
-   cd mcp-server
-   uv sync
-   ```
+```bash
+# Install ceregrep CLI
+npm install -g ceregrep
 
-3. **Add to Claude Desktop** (`~/Library/Application Support/Claude/claude_desktop_config.json`):
-   ```json
-   {
-     "mcpServers": {
-       "ceregrep": {
-         "command": "uv",
-         "args": [
-           "run",
-           "--directory",
-           "/path/to/ceregrep-client/mcp-server",
-           "python",
-           "mcp_server.py"
-         ]
-       }
-     }
-   }
-   ```
+# Add to Claude Desktop config
+{
+  "mcpServers": {
+    "ceregrep": {
+      "command": "uvx",
+      "args": ["ceregrep-mcp"]
+    }
+  }
+}
+```
+
+**Option 2: Install via pip**
+
+```bash
+npm install -g ceregrep  # Install ceregrep CLI
+pip install ceregrep-mcp  # Install MCP server
+```
+
+Then add to Claude Desktop:
+```json
+{
+  "mcpServers": {
+    "ceregrep": {
+      "command": "ceregrep-mcp"
+    }
+  }
+}
+```
 
 ### Available MCP Tools
 

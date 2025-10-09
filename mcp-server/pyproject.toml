@@ -1,8 +1,39 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
 [project]
-name = "ceregrep-mcp-server"
+name = "ceregrep-mcp"
 version = "0.1.0"
 description = "MCP server for ceregrep - exposes ceregrep query capabilities to other agents"
+readme = "README.md"
 requires-python = ">=3.10"
+license = "AGPL-3.0-or-later"
+authors = [
+    {name = "Swarm-Code"}
+]
+keywords = ["mcp", "model-context-protocol", "ceregrep", "agent", "llm", "cerebras"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: GNU Affero General Public License v3 or later (AGPLv3+)",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+]
 dependencies = [
     "mcp>=1.0.0",
 ]
+
+[project.urls]
+Homepage = "https://github.com/Swarm-Code/ceregrep-client"
+Documentation = "https://github.com/Swarm-Code/ceregrep-client/blob/master/mcp-server/README.md"
+Repository = "https://github.com/Swarm-Code/ceregrep-client"
+Issues = "https://github.com/Swarm-Code/ceregrep-client/issues"
+
+[project.scripts]
+ceregrep-mcp = "ceregrep_mcp.server:cli"
+
+[tool.hatch.build.targets.wheel]
+packages = ["ceregrep_mcp"]
