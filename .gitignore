@@ -20,3 +20,11 @@ swarm-client/
 # Debug logs
 debug-*.log
 *.debug.log
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+uv.lock

@@ -1,0 +1,8 @@
+[project]
+name = "ceregrep-mcp-server"
+version = "0.1.0"
+description = "MCP server for ceregrep - exposes ceregrep query capabilities to other agents"
+requires-python = ">=3.10"
+dependencies = [
+    "mcp>=1.0.0",
+]

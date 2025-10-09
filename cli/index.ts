@@ -8,6 +8,7 @@ import { Command } from 'commander';
 import { CeregrepClient } from '../sdk/typescript/index.js';
 import { getTools } from '../tools/index.js';
 import { getConfig } from '../config/loader.js';
+import { PersistentShell } from '../utils/shell.js';
 
 const program = new Command();
 
@@ -48,8 +49,12 @@ program
           console.log(textContent);
         }
       }
+
+      // Clean up persistent shell to allow process to exit
+      PersistentShell.getInstance().close();
     } catch (error) {
       console.error('Error:', error instanceof Error ? error.message : String(error));
+      PersistentShell.getInstance().close();
       process.exit(1);
     }
   });

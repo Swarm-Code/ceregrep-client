@@ -203,6 +203,58 @@ The framework consists of several modular components:
 - **SDK**: TypeScript (and Python) client libraries
 - **CLI**: Command-line interface
 
+## MCP Server
+
+Ceregrep can also be exposed as an **MCP server**, allowing other agents to use it as a tool for querying and analyzing codebases.
+
+### What is the MCP Server?
+
+The MCP server (`mcp-server/`) turns ceregrep into a context-finding tool that other agents can call. Instead of manually using bash and grep, agents can ask ceregrep (which has its own LLM-powered analysis) to find context.
+
+This creates a **recursive agent** pattern where agents can delegate complex context-finding to specialized sub-agents.
+
+### Setup MCP Server
+
+1. **Install ceregrep globally** (required):
+   ```bash
+   npm link
+   ```
+
+2. **Install Python dependencies**:
+   ```bash
+   cd mcp-server
+   uv sync
+   ```
+
+3. **Add to Claude Desktop** (`~/Library/Application Support/Claude/claude_desktop_config.json`):
+   ```json
+   {
+     "mcpServers": {
+       "ceregrep": {
+         "command": "uv",
+         "args": [
+           "run",
+           "--directory",
+           "/path/to/ceregrep-client/mcp-server",
+           "python",
+           "mcp_server.py"
+         ]
+       }
+     }
+   }
+   ```
+
+### Available MCP Tools
+
+- **ceregrep_query**: Query ceregrep to find context in codebases
+  - Parameters: `query` (required), `cwd`, `model`, `verbose`
+  - Example queries:
+    - "Find all async functions in this codebase"
+    - "Explain how the authentication system works"
+    - "Show me all API endpoints"
+
+See `mcp-server/README.md` for full documentation.
+
 ## Development
 
 ```bash
