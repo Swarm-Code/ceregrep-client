@@ -254,7 +254,7 @@ npm install -g ceregrep
 **Option 1: Using Claude MCP CLI (Easiest)**
 
 ```bash
-claude mcp add ceregrep-mcp
+claude mcp add ceregrep uvx ceregrep-mcp
 ```
 
 **Option 2: Using uvx (No Installation Required)**
