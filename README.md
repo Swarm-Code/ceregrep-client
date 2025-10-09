@@ -13,16 +13,16 @@ A modular, headless agent framework with support for Bash, Ripgrep, and MCP (Mod
 
 ## Installation
 
-### From npm (when published)
+### From npm
 
 ```bash
-npm install @ceregrep/client
+npm install ceregrep
 ```
 
 Or install globally for CLI usage:
 
 ```bash
-npm install -g @ceregrep/client
+npm install -g ceregrep
 ```
 
 ### From source (development)
@@ -49,7 +49,7 @@ After running `npm link`, you can use the `ceregrep` command anywhere in your sy
 ### TypeScript SDK
 
 ```typescript
-import { CeregrepClient } from '@ceregrep/client';
+import { CeregrepClient } from 'ceregrep';
 
 const client = new CeregrepClient({
   model: 'claude-sonnet-4-20250514',
