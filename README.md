@@ -1,6 +1,10 @@
 # Ceregrep Client
 
-A modular, headless agent framework with support for Bash, Ripgrep, and MCP (Model Context Protocol). Can be invoked via TypeScript SDK, Python SDK, or CLI.
+[![npm version](https://img.shields.io/npm/v/ceregrep.svg)](https://www.npmjs.com/package/ceregrep)
+[![npm downloads](https://img.shields.io/npm/dm/ceregrep.svg)](https://www.npmjs.com/package/ceregrep)
+[![license](https://img.shields.io/npm/l/ceregrep.svg)](https://github.com/Swarm-Code/ceregrep-client/blob/master/LICENSE)
+
+A modular, headless agent framework with support for Bash, Ripgrep, and MCP (Model Context Protocol). Can be invoked via TypeScript SDK, Python SDK, or CLI. **Now available on npm!**
 
 ## Features
 
