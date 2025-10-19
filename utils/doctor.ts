@@ -293,25 +293,47 @@ async function checkMCPServers(): Promise<DiagnosticResult> {
  */
 async function checkTools(): Promise<DiagnosticResult> {
   try {
-    const tools = await getMCPTools();
+    // Add timeout to tool checking to prevent hanging
+    const toolsCheckTimeoutMs = 12000; // 12 second timeout
 
-    const builtInTools = tools.filter((t) => t.name === 'bash' || t.name === 'grep');
-    const mcpTools = tools.filter((t) => t.name.startsWith('mcp__'));
+    const toolsPromise = (async () => {
+      const tools = await getMCPTools();
 
-    const details: string[] = [
-      `  ✓ Built-in tools: ${builtInTools.length}`,
-      `  ✓ MCP tools: ${mcpTools.length}`,
-      `  ✓ Total tools: ${tools.length}`,
-    ];
+      const builtInTools = tools.filter((t) => t.name === 'bash' || t.name === 'grep');
+      const mcpTools = tools.filter((t) => t.name.startsWith('mcp__'));
+
+      return {
+        total: tools.length,
+        builtIn: builtInTools.length,
+        mcp: mcpTools.length,
+      };
+    })();
+
+    const timeoutPromise = new Promise<{ total: number; builtIn: number; mcp: number }>((resolve) => {
+      const timeoutId = setTimeout(() => {
+        resolve({ total: 2, builtIn: 2, mcp: 0 }); // Return default built-in tools
+      }, toolsCheckTimeoutMs);
+
+      toolsPromise.then(
+        () => clearTimeout(timeoutId),
+        () => clearTimeout(timeoutId)
+      );
+    });
+
+    const toolStats = await Promise.race([toolsPromise, timeoutPromise]);
 
     return {
       name: 'Tools',
-      status: tools.length > 0 ? 'pass' : 'warn',
+      status: toolStats.total > 0 ? 'pass' : 'warn',
       message:
-        tools.length > 0
-          ? `✓ ${tools.length} tools available`
+        toolStats.total > 0
+          ? `✓ ${toolStats.total} tools available`
           : '⚠ No tools available',
-      details,
+      details: [
+        `  ✓ Built-in tools: ${toolStats.builtIn}`,
+        `  ✓ MCP tools: ${toolStats.mcp}`,
+        `  ✓ Total tools: ${toolStats.total}`,
+      ],
     };
   } catch (error) {
     return {

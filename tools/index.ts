@@ -29,7 +29,27 @@ export async function getTools(includeMCP: boolean = true): Promise<Tool[]> {
   if (includeMCP) {
     try {
       const { getMCPTools } = await import('../mcp/client.js');
-      const mcpTools = await getMCPTools();
+
+      // Add timeout to MCP tool loading to prevent hanging
+      const mcpLoadTimeoutMs = 15000; // 15 second timeout
+
+      const mcpToolsPromise = getMCPTools();
+
+      const timeoutPromise = new Promise<Tool[]>((resolve) => {
+        const timeoutId = setTimeout(() => {
+          if (process.env.DEBUG_MCP) {
+            console.warn('[MCP] Tool loading timed out, continuing without MCP tools');
+          }
+          resolve([]); // Return empty tools on timeout
+        }, mcpLoadTimeoutMs);
+
+        mcpToolsPromise.then(
+          () => clearTimeout(timeoutId),
+          () => clearTimeout(timeoutId)
+        );
+      });
+
+      const mcpTools = await Promise.race([mcpToolsPromise, timeoutPromise]);
       tools = [...tools, ...mcpTools];
 
       // Filter MCP tools based on configuration
@@ -65,7 +85,9 @@ export async function getTools(includeMCP: boolean = true): Promise<Tool[]> {
         return true;
       });
     } catch (error) {
-      console.warn('Failed to load MCP tools:', error);
+      if (process.env.DEBUG_MCP) {
+        console.warn('[MCP] Failed to load MCP tools:', error instanceof Error ? error.message : String(error));
+      }
     }
   }
 

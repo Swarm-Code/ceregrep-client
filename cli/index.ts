@@ -20,14 +20,22 @@ import {
 import { MCPServerConfig } from '../config/schema.js';
 import { checkForUpdates, formatUpdateNotification } from '../utils/version-check.js';
 import { runDiagnostics, formatDiagnostics } from '../utils/doctor.js';
+import { checkExecutablePermissions, formatPermissionError } from '../utils/permission-check.js';
 import { execSync } from 'child_process';
+
+// Check permissions on startup
+const permCheck = checkExecutablePermissions();
+if (!permCheck.isExecutable) {
+  console.error(formatPermissionError(permCheck));
+  process.exit(1);
+}
 
 const program = new Command();
 
 program
   .name('ceregrep')
   .description('Headless agent framework with Bash, Ripgrep, and MCP support')
-  .version('0.2.1');
+  .version('0.2.2');
 
 // Check for updates asynchronously (non-blocking)
 async function checkVersionOnStartup() {

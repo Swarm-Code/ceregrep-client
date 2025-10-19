@@ -161,22 +161,46 @@ export async function getMCPTools(): Promise<Tool[]> {
 
   for (const wrapped of clients) {
     if (wrapped.type === 'failed') {
-      console.warn(`Skipping failed MCP server "${wrapped.name}": ${wrapped.error}`);
+      if (process.env.DEBUG_MCP) {
+        console.warn(`Skipping failed MCP server "${wrapped.name}": ${wrapped.error}`);
+      }
       continue;
     }
 
     try {
-      const capabilities = await wrapped.client.getServerCapabilities?.();
-      if (!capabilities?.tools) {
-        continue;
-      }
+      // Add timeout for tool listing to prevent hanging
+      const toolListTimeoutMs = 10000; // 10 second timeout
 
-      const response = await wrapped.client.request(
-        { method: 'tools/list' },
-        ListToolsResultSchema
-      );
+      const getToolsPromise = (async () => {
+        const capabilities = await wrapped.client.getServerCapabilities?.();
+        if (!capabilities?.tools) {
+          return [];
+        }
 
-      const serverTools = response.tools || [];
+        const response = await wrapped.client.request(
+          { method: 'tools/list' },
+          ListToolsResultSchema
+        );
+
+        return response.tools || [];
+      })();
+
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        const timeoutId = setTimeout(() => {
+          reject(
+            new Error(
+              `Tool listing from MCP server "${wrapped.name}" timed out after ${toolListTimeoutMs}ms`
+            )
+          );
+        }, toolListTimeoutMs);
+
+        getToolsPromise.then(
+          () => clearTimeout(timeoutId),
+          () => clearTimeout(timeoutId)
+        );
+      });
+
+      const serverTools = await Promise.race([getToolsPromise, timeoutPromise]);
 
       for (const tool of serverTools) {
         // Build a more explicit description with required parameters info

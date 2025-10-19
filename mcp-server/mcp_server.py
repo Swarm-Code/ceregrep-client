@@ -3,6 +3,8 @@
 
 import asyncio
 import sys
+import signal
+import os
 from pathlib import Path
 
 # Add the mcp-server directory to Python path for imports
@@ -13,49 +15,107 @@ from mcp.server import NotificationOptions, Server
 from mcp.types import Tool, TextContent
 from tool_discovery import tool_discovery
 
+# Debug flag
+DEBUG_MCP = os.getenv("DEBUG_MCP", "").lower() in ("1", "true", "yes")
+
+if DEBUG_MCP:
+    print("[Ceregrep MCP] Initializing server", file=sys.stderr, flush=True)
 
 app = Server("ceregrep-mcp-server")
 
 # Discover tools on startup
 discovered_tools = tool_discovery.discover_tools()
 
+if DEBUG_MCP:
+    print(f"[Ceregrep MCP] Discovered {len(discovered_tools)} tools", file=sys.stderr, flush=True)
+
 
 @app.list_tools()
 async def handle_list_tools() -> list[Tool]:
     """List available tools."""
-    # Refresh tool discovery in case new tools were added
-    current_tools = tool_discovery.discover_tools()
-    return [tool.to_tool() for tool in current_tools.values()]
+    try:
+        # Refresh tool discovery in case new tools were added
+        current_tools = tool_discovery.discover_tools()
+        return [tool.to_tool() for tool in current_tools.values()]
+    except Exception as e:
+        if DEBUG_MCP:
+            print(f"[Ceregrep MCP] Error listing tools: {e}", file=sys.stderr, flush=True)
+        return []
 
 
 @app.call_tool()
 async def handle_call_tool(name: str, arguments: dict) -> list[TextContent]:
     """Handle tool calls."""
-    tool = tool_discovery.get_tool(name)
-    if tool:
-        return await tool.execute(arguments)
-    else:
-        raise ValueError(f"Unknown tool: {name}")
+    try:
+        tool = tool_discovery.get_tool(name)
+        if tool:
+            if DEBUG_MCP:
+                print(f"[Ceregrep MCP] Calling tool: {name}", file=sys.stderr, flush=True)
+            return await tool.execute(arguments)
+        else:
+            raise ValueError(f"Unknown tool: {name}")
+    except Exception as e:
+        if DEBUG_MCP:
+            print(f"[Ceregrep MCP] Error calling tool {name}: {e}", file=sys.stderr, flush=True)
+        raise
 
 
 async def main():
     """Main entry point for the MCP server."""
     from mcp.server.stdio import stdio_server
 
-    async with stdio_server() as (read_stream, write_stream):
-        await app.run(
-            read_stream,
-            write_stream,
-            InitializationOptions(
-                server_name="ceregrep-mcp-server",
-                server_version="0.1.0",
-                capabilities=app.get_capabilities(
-                    notification_options=NotificationOptions(),
-                    experimental_capabilities={},
+    try:
+        if DEBUG_MCP:
+            print("[Ceregrep MCP] Starting stdio server", file=sys.stderr, flush=True)
+
+        async with stdio_server() as (read_stream, write_stream):
+            if DEBUG_MCP:
+                print("[Ceregrep MCP] Stdio server connected", file=sys.stderr, flush=True)
+
+            await app.run(
+                read_stream,
+                write_stream,
+                InitializationOptions(
+                    server_name="ceregrep-mcp-server",
+                    server_version="0.2.2",
+                    capabilities=app.get_capabilities(
+                        notification_options=NotificationOptions(),
+                        experimental_capabilities={},
+                    ),
                 ),
-            ),
-        )
+            )
+    except asyncio.CancelledError:
+        if DEBUG_MCP:
+            print("[Ceregrep MCP] Server cancelled", file=sys.stderr, flush=True)
+        raise
+    except Exception as e:
+        if DEBUG_MCP:
+            print(f"[Ceregrep MCP] Fatal error: {e}", file=sys.stderr, flush=True)
+        raise
+    finally:
+        if DEBUG_MCP:
+            print("[Ceregrep MCP] Server shutdown", file=sys.stderr, flush=True)
+
+
+def handle_signal(signum, frame):
+    """Handle termination signals gracefully."""
+    if DEBUG_MCP:
+        print(f"[Ceregrep MCP] Received signal {signum}, shutting down", file=sys.stderr, flush=True)
+    sys.exit(0)
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    # Set up signal handlers for graceful shutdown
+    signal.signal(signal.SIGINT, handle_signal)
+    signal.signal(signal.SIGTERM, handle_signal)
+
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        if DEBUG_MCP:
+            print("[Ceregrep MCP] Interrupted by user", file=sys.stderr, flush=True)
+        sys.exit(0)
+    except Exception as e:
+        if DEBUG_MCP:
+            print(f"[Ceregrep MCP] Unexpected error: {e}", file=sys.stderr, flush=True)
+        sys.exit(1)
