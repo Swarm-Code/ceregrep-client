@@ -9,6 +9,7 @@ import { query as agentQuery, compact as agentCompact } from '../../core/agent.j
 import { getTools } from '../../tools/index.js';
 import { getConfig } from '../../config/loader.js';
 import { querySonnet, formatSystemPromptWithContext } from '../../llm/router.js';
+import { shouldCompact, countTokens, getTokenStats } from '../../core/tokens.js';
 
 export interface QueryOptions {
   model?: string;
@@ -18,10 +19,15 @@ export interface QueryOptions {
   verbose?: boolean;
   debug?: boolean;
   dangerouslySkipPermissions?: boolean;
+  compactionThreshold?: number; // Token threshold for auto-compaction (default 100k)
 }
 
 export interface QueryResult {
   messages: Message[];
+}
+
+export interface StreamQueryResult {
+  messages: AsyncGenerator<Message, void>;
 }
 
 /**
@@ -55,6 +61,20 @@ export class CeregrepClient {
     const tools = options.tools || this.tools;
     const model = options.model || this.model;
     const apiKey = options.apiKey || this.config.apiKey;
+    const compactionThreshold = options.compactionThreshold || this.config.compactionThreshold || 100000;
+
+    // Silently compact if needed (no messages to AI to avoid lazy behavior)
+    if (shouldCompact(this.messages, compactionThreshold)) {
+      if (options.debug) {
+        const stats = getTokenStats(this.messages);
+        console.log(`[CEREGREP DEBUG] Auto-compacting conversation (${stats.total} tokens >= ${compactionThreshold})`);
+      }
+      await this.compact();
+      if (options.debug) {
+        const newStats = getTokenStats(this.messages);
+        console.log(`[CEREGREP DEBUG] Compaction complete (reduced tokens: ${newStats.total})`);
+      }
+    }
 
     // Create user message
     const userMessage = createUserMessage(prompt);
@@ -136,6 +156,106 @@ export class CeregrepClient {
   }
 
   /**
+   * Query the agent with streaming message output
+   * Yields messages in real-time as they are generated
+   */
+  async* queryStream(prompt: string, options: QueryOptions = {}): AsyncGenerator<Message, void> {
+    if (this.tools.length === 0) {
+      await this.initialize();
+    }
+
+    const tools = options.tools || this.tools;
+    const model = options.model || this.model;
+    const apiKey = options.apiKey || this.config.apiKey;
+    const compactionThreshold = options.compactionThreshold || this.config.compactionThreshold || 100000;
+
+    // Silently compact if needed (no messages to AI to avoid lazy behavior)
+    if (shouldCompact(this.messages, compactionThreshold)) {
+      if (options.debug) {
+        const stats = getTokenStats(this.messages);
+        console.log(`[CEREGREP DEBUG] Auto-compacting conversation (${stats.total} tokens >= ${compactionThreshold})`);
+      }
+      await this.compact();
+      if (options.debug) {
+        const newStats = getTokenStats(this.messages);
+        console.log(`[CEREGREP DEBUG] Compaction complete (reduced tokens: ${newStats.total})`);
+      }
+    }
+
+    // Create user message
+    const userMessage = createUserMessage(prompt);
+    this.messages.push(userMessage);
+
+    // System prompt (same as query method)
+    const systemPrompt = [
+      'You are a helpful AI assistant with access to bash and file search tools.',
+      'Use the tools available to help the user accomplish their tasks.',
+      '',
+      'CRITICAL INSTRUCTION - CONTEXT AND EXPLANATION REQUIREMENTS:',
+      '- Give as much context as possible in your responses. It is ALWAYS better to add too much context than too little.',
+      '- Use file references with line numbers in the format: filename.ts:123 or path/to/file.py:456',
+      '- Explain everything in an ultra explanatory tone, assuming the user needs complete understanding.',
+      '- Include specific details: function names, variable names, code snippets, file paths with line numbers.',
+      '- When referencing code, ALWAYS include the file path and line number where it can be found.',
+      '- Provide thorough explanations of how things work, why they work that way, and what each piece does.',
+      '- Word for word: "Better to add too much context than necessary" - follow this principle strictly.',
+      '',
+      'CRITICAL INSTRUCTION - MUST USE TOOLS TO GATHER INFORMATION:',
+      '- You MUST use grep to search for information before answering questions about code.',
+      '- You CANNOT rely on stored context or prior knowledge about the codebase.',
+      '- Everything must be read using tools before giving an explanation.',
+      '- This is to ensure that you do not lazily answer questions without verifying current state.',
+      '- Always grep for relevant files, read the actual code, and then provide your explanation.',
+      '- Never answer based solely on assumptions or memory - always verify with tools first.',
+    ];
+
+    // Context
+    const context = {
+      cwd: process.cwd(),
+      date: new Date().toISOString(),
+    };
+
+    // Permission checker
+    const canUseTool = async (toolName: string, input: any) => {
+      if (options.dangerouslySkipPermissions) {
+        return true;
+      }
+      return true;
+    };
+
+    // Tool context
+    const toolContext = {
+      options: {
+        tools,
+        verbose: options.verbose || false,
+        debug: options.debug || false,
+        slowAndCapableModel: model,
+        maxThinkingTokens: options.maxThinkingTokens || 0,
+        dangerouslySkipPermissions: options.dangerouslySkipPermissions || false,
+        commands: [],
+        forkNumber: 0,
+        messageLogName: 'sdk-query-stream',
+      },
+      abortController: new AbortController(),
+      readFileTimestamps: {},
+    };
+
+    // Execute query and yield messages in real-time
+    for await (const message of agentQuery(
+      this.messages,
+      systemPrompt,
+      context,
+      canUseTool,
+      toolContext,
+      querySonnet,
+      formatSystemPromptWithContext,
+    )) {
+      this.messages.push(message);
+      yield message;
+    }
+  }
+
+  /**
    * Get conversation history
    */
   getHistory(): Message[] {
@@ -151,17 +271,21 @@ export class CeregrepClient {
 
   /**
    * Compact conversation history (summarize with LLM)
+   * Keeps recent messages and summarizes older context
    */
-  async compact() {
+  async compact(keepRecentCount?: number) {
+    const count = keepRecentCount || this.config.compactionKeepRecentCount || 10;
     const result = await agentCompact(
       this.messages,
       this.tools,
       querySonnet,
       this.model,
       new AbortController().signal,
+      count,
     );
 
-    this.messages = [result.summary];
+    // Replace messages with: [summary, ...recent messages]
+    this.messages = [result.summary, ...result.recentMessages];
   }
 
   /**

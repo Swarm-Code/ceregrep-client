@@ -48,6 +48,10 @@ export const ConfigSchema = z.object({
   maxThinkingTokens: z.number().optional().default(0),
   verbose: z.boolean().optional().default(false),
   debug: z.boolean().optional().default(false),
+
+  // Context compaction settings
+  compactionThreshold: z.number().optional().default(100000), // 100k tokens (75% of 131k context)
+  compactionKeepRecentCount: z.number().optional().default(10), // Keep last 10 messages
 });
 
 export type Config = z.infer<typeof ConfigSchema>;

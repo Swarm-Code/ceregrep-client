@@ -147,7 +147,7 @@ export async function queryCerebras(
       messages: apiMessages,
       temperature: options.temperature ?? 0.7,
       top_p: options.top_p ?? 0.8,
-      max_tokens: 128000, // 128k max tokens for Cerebras
+      max_tokens: 100000, // 100k tokens (75% of 131k context window)
     };
 
     // Only add tools if there are any
@@ -227,7 +227,7 @@ export async function queryCerebras(
       toolCount: apiTools.length,
       temperature: options.temperature ?? 0.7,
       top_p: options.top_p ?? 0.8,
-      max_tokens: 128000,
+      max_tokens: 100000,
     }, null, 2));
 
     throw error;

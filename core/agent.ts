@@ -17,6 +17,7 @@ import {
   INTERRUPT_MESSAGE,
   INTERRUPT_MESSAGE_FOR_TOOL_USE,
 } from './messages.js';
+import { countTokens, shouldCompact } from './tokens.js';
 
 export type CanUseToolFn = (
   toolName: string,
@@ -57,12 +58,15 @@ export async function* query(
 ): AsyncGenerator<Message, void> {
   const fullSystemPrompt = formatSystemPromptFn(systemPrompt, context);
 
+  // Check token count before query (debug only, no warnings to AI)
   if (toolUseContext.options.debug) {
+    const currentTokens = countTokens(messages);
     console.log('[AGENT] Starting query with:', {
       messageCount: messages.length,
       systemPromptLength: fullSystemPrompt.length,
       toolCount: toolUseContext.options.tools?.length || 0,
       toolNames: toolUseContext.options.tools?.map(t => t.name) || [],
+      currentTokens,
     });
   }
 
@@ -245,7 +249,14 @@ async function* runToolsSerially(
 
 /**
  * Compact conversation history by summarizing with LLM
- * Reduces token count while preserving context
+ * Reduces token count while preserving recent context
+ *
+ * @param messages - Full conversation history
+ * @param tools - Available tools
+ * @param querySonnetFn - LLM query function
+ * @param model - Model to use for summarization
+ * @param abortSignal - Abort signal
+ * @param keepRecentCount - Number of recent messages to preserve (default 10)
  */
 export async function compact(
   messages: Message[],
@@ -260,16 +271,34 @@ export async function compact(
   ) => Promise<AssistantMessage>,
   model: string,
   abortSignal: AbortSignal,
-): Promise<{ summary: AssistantMessage; clearedMessages: Message[] }> {
+  keepRecentCount: number = 10,
+): Promise<{ summary: AssistantMessage; clearedMessages: Message[]; recentMessages: Message[] }> {
+  // If not enough messages to compact, return as-is
+  if (messages.length <= keepRecentCount) {
+    return {
+      summary: createAssistantMessage('No compaction needed.'),
+      clearedMessages: [],
+      recentMessages: messages,
+    };
+  }
+
+  // Split messages into older (to summarize) and recent (to keep)
+  const messagesToSummarize = messages.slice(0, -keepRecentCount);
+  const recentMessages = messages.slice(-keepRecentCount);
+
+  // Create summary request
   const summaryRequest = createUserMessage(
-    'Provide a detailed but concise summary of our conversation above. ' +
-      'Focus on information that would be helpful for continuing the conversation. ' +
-      'Include key decisions, important context, and any outstanding tasks or issues.',
+    'Provide a detailed but concise summary of the conversation above. ' +
+      'Focus on: key decisions made, important context discovered, files analyzed, ' +
+      'code patterns identified, and any outstanding tasks. ' +
+      'Be specific with file paths, function names, and technical details.',
   );
 
+  // Generate summary from older messages
   const summaryResponse = await querySonnetFn(
-    normalizeMessagesForAPI([...messages, summaryRequest]),
-    ['You are a helpful AI assistant tasked with summarizing conversations.'],
+    normalizeMessagesForAPI([...messagesToSummarize, summaryRequest]),
+    ['You are a helpful AI assistant tasked with summarizing technical conversations. ' +
+     'Preserve all technical details, file paths, and specific implementation context.'],
     0,
     tools,
     abortSignal,
@@ -282,6 +311,7 @@ export async function compact(
 
   return {
     summary: summaryResponse,
-    clearedMessages: [],
+    clearedMessages: messagesToSummarize,
+    recentMessages,
   };
 }
