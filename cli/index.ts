@@ -18,13 +18,34 @@ import {
   disconnectAllServers,
 } from '../mcp/client.js';
 import { MCPServerConfig } from '../config/schema.js';
+import { checkForUpdates, formatUpdateNotification } from '../utils/version-check.js';
+import { runDiagnostics, formatDiagnostics } from '../utils/doctor.js';
+import { execSync } from 'child_process';
 
 const program = new Command();
 
 program
   .name('ceregrep')
   .description('Headless agent framework with Bash, Ripgrep, and MCP support')
-  .version('0.2.0');
+  .version('0.2.1');
+
+// Check for updates asynchronously (non-blocking)
+async function checkVersionOnStartup() {
+  try {
+    const versionInfo = await checkForUpdates();
+    if (versionInfo.isOutdated) {
+      const notification = formatUpdateNotification(versionInfo);
+      console.log(notification);
+    }
+  } catch (error) {
+    // Silently ignore version check errors
+  }
+}
+
+// Run version check in background (non-blocking)
+checkVersionOnStartup().catch(() => {
+  // Ignore errors
+});
 
 program
   .command('query')
@@ -200,6 +221,88 @@ program
       }
 
       await disconnectAllServers();
+    } catch (error) {
+      console.error('Error:', error instanceof Error ? error.message : String(error));
+      process.exit(1);
+    }
+  });
+
+program
+  .command('doctor')
+  .description('Run system diagnostics')
+  .action(async () => {
+    try {
+      console.log('Running diagnostics...\n');
+      const results = await runDiagnostics();
+      const output = formatDiagnostics(results);
+      console.log(output);
+    } catch (error) {
+      console.error('Error:', error instanceof Error ? error.message : String(error));
+      process.exit(1);
+    }
+  });
+
+program
+  .command('update')
+  .description('Update ceregrep to the latest version')
+  .action(async () => {
+    try {
+      console.log('Checking for updates...\n');
+      const versionInfo = await checkForUpdates();
+
+      if (!versionInfo.isOutdated) {
+        console.log(
+          `✓ You are already on the latest version (${versionInfo.current})`
+        );
+        return;
+      }
+
+      console.log(
+        `Updating from ${versionInfo.current} to ${versionInfo.latest}...`
+      );
+      console.log('');
+
+      // Run npm update
+      try {
+        execSync('npm install -g ceregrep@latest --force', {
+          stdio: 'inherit',
+        });
+        console.log(
+          `\n✓ Successfully updated to version ${versionInfo.latest}`
+        );
+      } catch (error) {
+        console.error('✗ Failed to update. Please try manually:');
+        console.error('  npm install -g ceregrep@latest');
+        process.exit(1);
+      }
+    } catch (error) {
+      console.error('Error:', error instanceof Error ? error.message : String(error));
+      process.exit(1);
+    }
+  });
+
+program
+  .command('install')
+  .description('Reinstall ceregrep (useful for fixing issues)')
+  .action(async () => {
+    try {
+      const version = await import('../utils/version-check.js').then(
+        (m) => m.getLocalVersion()
+      );
+
+      console.log(`Reinstalling ceregrep ${version}...\n`);
+
+      try {
+        execSync('npm install -g . --force', {
+          stdio: 'inherit',
+          cwd: process.cwd(),
+        });
+        console.log(`\n✓ Successfully reinstalled ceregrep ${version}`);
+      } catch (error) {
+        console.error('✗ Failed to reinstall. Please try manually:');
+        console.error('  npm install -g . --force');
+        process.exit(1);
+      }
     } catch (error) {
       console.error('Error:', error instanceof Error ? error.message : String(error));
       process.exit(1);
