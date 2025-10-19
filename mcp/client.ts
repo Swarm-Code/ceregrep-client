@@ -141,9 +141,20 @@ export async function disconnectAllServers(): Promise<void> {
     connectedClients.map(async (wrapped) => {
       if (wrapped.type === 'connected') {
         try {
-          await wrapped.client.close?.();
+          // Close with timeout to prevent hanging
+          const closePromise = wrapped.client.close?.();
+          if (closePromise) {
+            await Promise.race([
+              closePromise,
+              new Promise((_, reject) =>
+                setTimeout(() => reject(new Error('Close timeout')), 2000)
+              ),
+            ]);
+          }
         } catch (error) {
-          console.error(`Error closing ${wrapped.name}:`, error);
+          if (process.env.DEBUG_MCP) {
+            console.error(`Error closing ${wrapped.name}:`, error);
+          }
         }
       }
     })

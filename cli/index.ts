@@ -124,6 +124,7 @@ program
 
       // Clean up persistent shell to allow process to exit
       PersistentShell.getInstance().close();
+      process.exit(0);
     } catch (error) {
       renderer.finish(error instanceof Error ? error : new Error(String(error)));
       PersistentShell.getInstance().close();
@@ -145,6 +146,8 @@ program
             : await tool.description();
         console.log(`  ${tool.name}: ${description}`);
       }
+      await disconnectAllServers();
+      process.exit(0);
     } catch (error) {
       console.error('Error:', error instanceof Error ? error.message : String(error));
       process.exit(1);
@@ -229,6 +232,7 @@ program
       }
 
       await disconnectAllServers();
+      process.exit(0);
     } catch (error) {
       console.error('Error:', error instanceof Error ? error.message : String(error));
       process.exit(1);
@@ -244,6 +248,8 @@ program
       const results = await runDiagnostics();
       const output = formatDiagnostics(results);
       console.log(output);
+      await disconnectAllServers();
+      process.exit(0);
     } catch (error) {
       console.error('Error:', error instanceof Error ? error.message : String(error));
       process.exit(1);
@@ -262,7 +268,8 @@ program
         console.log(
           `✓ You are already on the latest version (${versionInfo.current})`
         );
-        return;
+        await disconnectAllServers();
+        process.exit(0);
       }
 
       console.log(
@@ -278,6 +285,8 @@ program
         console.log(
           `\n✓ Successfully updated to version ${versionInfo.latest}`
         );
+        await disconnectAllServers();
+        process.exit(0);
       } catch (error) {
         console.error('✗ Failed to update. Please try manually:');
         console.error('  npm install -g ceregrep@latest');
@@ -306,6 +315,8 @@ program
           cwd: process.cwd(),
         });
         console.log(`\n✓ Successfully reinstalled ceregrep ${version}`);
+        await disconnectAllServers();
+        process.exit(0);
       } catch (error) {
         console.error('✗ Failed to reinstall. Please try manually:');
         console.error('  npm install -g . --force');
@@ -328,7 +339,8 @@ mcpCommand
       const servers = await listMCPServers();
       if (servers.length === 0) {
         console.log('No MCP servers configured.');
-        return;
+        await disconnectAllServers();
+        process.exit(0);
       }
 
       console.log('Configured MCP servers:\n');
@@ -347,6 +359,7 @@ mcpCommand
       }
 
       await disconnectAllServers();
+      process.exit(0);
     } catch (error) {
       console.error('Error:', error instanceof Error ? error.message : String(error));
       process.exit(1);
@@ -424,6 +437,8 @@ mcpCommand
       saveCurrentProjectConfig(config);
 
       console.log(`✓ MCP server "${name}" added to .ceregrep.json`);
+      await disconnectAllServers();
+      process.exit(0);
     } catch (error) {
       console.error('Error:', error instanceof Error ? error.message : String(error));
       process.exit(1);
@@ -446,6 +461,7 @@ mcpCommand
 
       console.log(`✓ MCP server "${name}" removed from .ceregrep.json`);
       await disconnectAllServers();
+      process.exit(0);
     } catch (error) {
       console.error('Error:', error instanceof Error ? error.message : String(error));
       process.exit(1);
@@ -476,6 +492,7 @@ mcpCommand
       }
 
       await disconnectAllServers();
+      process.exit(0);
     } catch (error) {
       console.error('Error:', error instanceof Error ? error.message : String(error));
       process.exit(1);
@@ -509,6 +526,7 @@ mcpCommand
 
       saveCurrentProjectConfig(config);
       await disconnectAllServers();
+      process.exit(0);
     } catch (error) {
       console.error('Error:', error instanceof Error ? error.message : String(error));
       process.exit(1);
@@ -544,6 +562,7 @@ mcpCommand
 
       saveCurrentProjectConfig(config);
       await disconnectAllServers();
+      process.exit(0);
     } catch (error) {
       console.error('Error:', error instanceof Error ? error.message : String(error));
       process.exit(1);
