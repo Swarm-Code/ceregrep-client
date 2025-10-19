@@ -24,7 +24,7 @@ const program = new Command();
 program
   .name('ceregrep')
   .description('Headless agent framework with Bash, Ripgrep, and MCP support')
-  .version('0.1.0');
+  .version('0.2.0');
 
 program
   .command('query')
