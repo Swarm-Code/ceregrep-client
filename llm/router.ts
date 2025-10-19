@@ -26,12 +26,18 @@ export async function querySonnet(
     model?: string;
     prependCLISysprompt?: boolean;
     apiKey?: string;
+    enableThinking?: boolean;
+    ultrathinkMode?: boolean;
   },
 ): Promise<AssistantMessage> {
   const config = getConfig();
 
   // Determine provider
   const provider = config.provider?.type || 'anthropic';
+
+  // Use thinking settings from config if not provided in options
+  const enableThinking = options.enableThinking ?? config.enableThinking ?? false;
+  const ultrathinkMode = options.ultrathinkMode ?? config.ultrathinkMode ?? false;
 
   // Route to appropriate provider
   switch (provider) {
@@ -51,6 +57,8 @@ export async function querySonnet(
         ...options,
         apiKey: options.apiKey || config.apiKey,
         model: options.model || config.model,
+        enableThinking,
+        ultrathinkMode,
       });
   }
 }

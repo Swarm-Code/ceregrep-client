@@ -20,6 +20,8 @@ export interface QueryOptions {
   debug?: boolean;
   dangerouslySkipPermissions?: boolean;
   compactionThreshold?: number; // Token threshold for auto-compaction (default 100k)
+  enableThinking?: boolean; // Enable extended thinking mode
+  ultrathinkMode?: boolean; // Enable ultrathink mode (more tokens)
 }
 
 export interface QueryResult {
@@ -126,6 +128,8 @@ export class CeregrepClient {
         debug: options.debug || false,
         slowAndCapableModel: model,
         maxThinkingTokens: options.maxThinkingTokens || 0,
+        enableThinking: options.enableThinking || false,
+        ultrathinkMode: options.ultrathinkMode || false,
         dangerouslySkipPermissions: options.dangerouslySkipPermissions || false,
         commands: [],
         forkNumber: 0,
@@ -231,6 +235,8 @@ export class CeregrepClient {
         debug: options.debug || false,
         slowAndCapableModel: model,
         maxThinkingTokens: options.maxThinkingTokens || 0,
+        enableThinking: options.enableThinking || false,
+        ultrathinkMode: options.ultrathinkMode || false,
         dangerouslySkipPermissions: options.dangerouslySkipPermissions || false,
         commands: [],
         forkNumber: 0,

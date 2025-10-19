@@ -81,6 +81,8 @@ export async function* query(
       dangerouslySkipPermissions: toolUseContext.options.dangerouslySkipPermissions ?? false,
       model: toolUseContext.options.slowAndCapableModel,
       prependCLISysprompt: true,
+      enableThinking: (toolUseContext.options as any).enableThinking ?? false,
+      ultrathinkMode: (toolUseContext.options as any).ultrathinkMode ?? false,
     },
   );
 

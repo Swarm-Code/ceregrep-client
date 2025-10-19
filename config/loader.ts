@@ -3,7 +3,7 @@
  * Loads and merges config from global and project directories
  */
 
-import { existsSync, readFileSync } from 'fs';
+import { existsSync, readFileSync, writeFileSync } from 'fs';
 import { homedir } from 'os';
 import { join } from 'path';
 import { Config, ConfigSchema } from './schema.js';
@@ -80,4 +80,38 @@ export function getConfig(cwd: string = process.cwd()): Config {
   const validated = ConfigSchema.parse(mergedConfig);
 
   return validated;
+}
+
+/**
+ * Get current project config (alias for backward compatibility)
+ */
+export function getCurrentProjectConfig(cwd: string = process.cwd()): Partial<Config> {
+  return getProjectConfig(cwd);
+}
+
+/**
+ * Save project config to .ceregrep.json
+ */
+export function saveCurrentProjectConfig(config: Partial<Config>, cwd: string = process.cwd()): void {
+  const configPath = join(cwd, '.ceregrep.json');
+
+  try {
+    writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf-8');
+  } catch (error) {
+    throw new Error(`Failed to save config to ${configPath}: ${error}`);
+  }
+}
+
+/**
+ * Save global config to home directory
+ */
+export function saveGlobalConfig(config: Partial<Config>): void {
+  const homeDir = homedir();
+  const configPath = join(homeDir, '.ceregrep.json');
+
+  try {
+    writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf-8');
+  } catch (error) {
+    throw new Error(`Failed to save config to ${configPath}: ${error}`);
+  }
 }

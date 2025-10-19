@@ -1,0 +1,67 @@
+{
+  "project": "ceregrep",
+  "auto_initialized": true,
+  "trigger_phrases": [
+    "go ahead",
+    "make it so",
+    "ship it",
+    "do it",
+    "proceed",
+    "implement",
+    "approved",
+    "lgtm",
+    "yes go",
+    "sounds good go"
+  ],
+  "blocked_tools": [
+    "Edit",
+    "Write",
+    "MultiEdit",
+    "NotebookEdit"
+  ],
+  "branch_enforcement": {
+    "enabled": true,
+    "task_prefixes": [
+      "implement-",
+      "fix-",
+      "refactor-",
+      "migrate-",
+      "test-",
+      "docs-"
+    ],
+    "branch_prefixes": {
+      "implement-": "feature/",
+      "fix-": "fix/",
+      "refactor-": "feature/",
+      "migrate-": "feature/",
+      "test-": "feature/",
+      "docs-": "docs/"
+    }
+  },
+  "read_only_bash_commands": [
+    "ls",
+    "ll",
+    "pwd",
+    "cd",
+    "echo",
+    "cat",
+    "head",
+    "tail",
+    "grep",
+    "rg",
+    "find",
+    "which",
+    "file",
+    "stat",
+    "git status",
+    "git log",
+    "git diff",
+    "git show",
+    "git branch",
+    "npm list",
+    "npm ls",
+    "pip list",
+    "pip show"
+  ],
+  "created": "2025-10-19T21:02:14.487Z"
+}

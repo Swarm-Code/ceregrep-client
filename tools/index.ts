@@ -17,7 +17,7 @@ export function getAllTools(): Tool[] {
 
 /**
  * Get all enabled tools including MCP tools
- * Filters by isEnabled() method
+ * Filters by isEnabled() method and MCP server configuration
  *
  * @param includeMCP - Whether to include MCP tools (default: true)
  * @returns Array of enabled tools
@@ -31,6 +31,39 @@ export async function getTools(includeMCP: boolean = true): Promise<Tool[]> {
       const { getMCPTools } = await import('../mcp/client.js');
       const mcpTools = await getMCPTools();
       tools = [...tools, ...mcpTools];
+
+      // Filter MCP tools based on configuration
+      const { getConfig } = await import('../config/loader.js');
+      const config = await getConfig(process.cwd());
+
+      // Filter out tools from disabled MCP servers
+      tools = tools.filter((tool) => {
+        if (!tool.name.startsWith('mcp__')) {
+          return true; // Keep non-MCP tools
+        }
+
+        // Extract server name from tool name format: mcp__<server>__<tool>
+        const parts = tool.name.split('__');
+        if (parts.length < 3) return true;
+
+        const serverName = parts[1];
+        const toolName = parts[2];
+
+        const serverConfig = config.mcpServers?.[serverName];
+        if (!serverConfig) return true;
+
+        // Skip if entire server is disabled
+        if (serverConfig.disabled) {
+          return false;
+        }
+
+        // Skip if this specific tool is disabled in the server
+        if (serverConfig.disabledTools?.includes(toolName)) {
+          return false;
+        }
+
+        return true;
+      });
     } catch (error) {
       console.warn('Failed to load MCP tools:', error);
     }

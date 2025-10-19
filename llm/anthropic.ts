@@ -65,6 +65,8 @@ export async function querySonnet(
     model?: string;
     prependCLISysprompt?: boolean;
     apiKey?: string;
+    enableThinking?: boolean;
+    ultrathinkMode?: boolean;
   },
 ): Promise<AssistantMessage> {
   const apiKey = options.apiKey || process.env.ANTHROPIC_API_KEY;
@@ -91,14 +93,26 @@ export async function querySonnet(
   const startTime = Date.now();
 
   try {
-    const response = await anthropic.messages.create({
+    // Build request parameters
+    const requestParams: any = {
       model,
       max_tokens: 8192,
       messages: apiMessages,
       system: systemPrompt.join('\n\n'),
       tools: apiTools.length > 0 ? apiTools : undefined,
       temperature: 1,
-    });
+    };
+
+    // Add thinking mode if enabled
+    if (options.enableThinking || options.ultrathinkMode) {
+      const thinkingBudgetTokens = maxThinkingTokens || (options.ultrathinkMode ? 20000 : 10000);
+      requestParams.thinking = {
+        type: 'enabled',
+        budget_tokens: thinkingBudgetTokens,
+      };
+    }
+
+    const response = await anthropic.messages.create(requestParams as any);
 
     const durationMs = Date.now() - startTime;
     const costUSD = calculateCost(response.usage, model);

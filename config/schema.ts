@@ -11,12 +11,24 @@ export const MCPServerConfigSchema = z.union([
     command: z.string(),
     args: z.array(z.string()).optional(),
     env: z.record(z.string()).optional(),
-  }),
+    disabled: z.boolean().optional(),
+    disabledTools: z.array(z.string()).optional(),
+  }).transform(obj => ({
+    ...obj,
+    disabled: obj.disabled ?? false,
+    disabledTools: obj.disabledTools ?? [],
+  })),
   z.object({
     type: z.literal('sse'),
     url: z.string().url(),
     headers: z.record(z.string()).optional(),
-  }),
+    disabled: z.boolean().optional(),
+    disabledTools: z.array(z.string()).optional(),
+  }).transform(obj => ({
+    ...obj,
+    disabled: obj.disabled ?? false,
+    disabledTools: obj.disabledTools ?? [],
+  })),
 ]);
 
 export type MCPServerConfig = z.infer<typeof MCPServerConfigSchema>;
@@ -43,6 +55,10 @@ export const ConfigSchema = z.object({
 
   // MCP servers
   mcpServers: z.record(MCPServerConfigSchema).optional(),
+
+  // Thinking mode settings (extended thinking)
+  enableThinking: z.boolean().optional().default(false),
+  ultrathinkMode: z.boolean().optional().default(false),
 
   // Other settings
   maxThinkingTokens: z.number().optional().default(0),
