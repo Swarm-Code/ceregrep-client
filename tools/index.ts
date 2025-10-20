@@ -16,13 +16,14 @@ export function getAllTools(): Tool[] {
 }
 
 /**
- * Get all enabled tools including MCP tools
+ * Get all enabled tools including MCP tools and agent tools
  * Filters by isEnabled() method and MCP server configuration
  *
  * @param includeMCP - Whether to include MCP tools (default: true)
+ * @param includeAgents - Whether to include agent tools (default: true)
  * @returns Array of enabled tools
  */
-export async function getTools(includeMCP: boolean = true): Promise<Tool[]> {
+export async function getTools(includeMCP: boolean = true, includeAgents: boolean = true): Promise<Tool[]> {
   let tools = getAllTools();
 
   // Add MCP tools if requested
@@ -87,6 +88,19 @@ export async function getTools(includeMCP: boolean = true): Promise<Tool[]> {
     } catch (error) {
       if (process.env.DEBUG_MCP) {
         console.warn('[MCP] Failed to load MCP tools:', error instanceof Error ? error.message : String(error));
+      }
+    }
+  }
+
+  // Add agent tools if requested
+  if (includeAgents) {
+    try {
+      const { getAgentTools } = await import('../agents/index.js');
+      const agentTools = await getAgentTools();
+      tools = [...tools, ...agentTools];
+    } catch (error) {
+      if (process.env.DEBUG_MCP) {
+        console.warn('[AGENTS] Failed to load agent tools:', error instanceof Error ? error.message : String(error));
       }
     }
   }

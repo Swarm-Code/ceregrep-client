@@ -5,6 +5,7 @@
 
 import { spawn, type ChildProcess } from 'child_process';
 import * as fs from 'fs';
+import { mkdir } from 'fs/promises';
 import * as os from 'os';
 import { join } from 'path';
 
@@ -201,5 +202,19 @@ export class PersistentShell {
 
   close() {
     this.shell.kill();
+  }
+}
+
+/**
+ * Ensure directory exists, creating it recursively if needed
+ */
+export async function ensureDir(dirPath: string): Promise<void> {
+  try {
+    await mkdir(dirPath, { recursive: true });
+  } catch (error) {
+    // Ignore if directory already exists
+    if ((error as NodeJS.ErrnoException).code !== 'EEXIST') {
+      throw error;
+    }
   }
 }
