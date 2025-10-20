@@ -250,21 +250,78 @@ export async function getMCPTools(): Promise<Tool[]> {
           isReadOnly: () => false,
           isEnabled: async () => true,
           call: async function* (input: Record<string, unknown>) {
-            try {
-              const result = await wrapped.client.callTool({
-                name: tool.name,
-                arguments: input,
-              });
+            const MAX_RETRIES = 3;
+            const RETRY_DELAY_MS = 1000;
+            let lastError: Error | undefined;
 
-              yield {
-                type: 'result',
-                data: result,
-                resultForAssistant: formatMCPResult(result),
-              };
-            } catch (error) {
-              const errorMessage = error instanceof Error ? error.message : String(error);
-              throw new Error(`Error calling MCP tool ${tool.name}: ${errorMessage}`);
+            for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+              try {
+                // Clean up query on retry attempts by truncating if it's too long
+                let cleanedInput = input;
+                if (attempt > 0 && input.query && typeof input.query === 'string') {
+                  const query = input.query as string;
+                  // On first retry, truncate to 1000 chars
+                  // On second retry, truncate to 500 chars
+                  const maxLength = attempt === 1 ? 1000 : 500;
+                  if (query.length > maxLength) {
+                    cleanedInput = {
+                      ...input,
+                      query: query.substring(0, maxLength) + '...\n\n[Query truncated due to previous error. Please try a shorter, more focused query.]'
+                    };
+                    if (process.env.DEBUG_MCP) {
+                      console.warn(`[MCP ${wrapped.name}] Retry ${attempt}: Truncated query from ${query.length} to ${maxLength} chars`);
+                    }
+                  }
+                }
+
+                const result = await wrapped.client.callTool({
+                  name: tool.name,
+                  arguments: cleanedInput,
+                });
+
+                // Success - yield result
+                yield {
+                  type: 'result',
+                  data: result,
+                  resultForAssistant: formatMCPResult(result),
+                };
+                return; // Exit successfully
+              } catch (error) {
+                lastError = error instanceof Error ? error : new Error(String(error));
+                const errorMessage = lastError.message;
+
+                // Check if it's a 400 error or similar request error
+                const is400Error = errorMessage.includes('400') ||
+                                   errorMessage.includes('Bad Request') ||
+                                   errorMessage.includes('Invalid request');
+
+                if (process.env.DEBUG_MCP) {
+                  console.warn(
+                    `[MCP ${wrapped.name}] Attempt ${attempt + 1}/${MAX_RETRIES} failed: ${errorMessage}`
+                  );
+                }
+
+                // If this is the last attempt, throw the error
+                if (attempt === MAX_RETRIES - 1) {
+                  throw new Error(`Error calling MCP tool ${tool.name} after ${MAX_RETRIES} attempts: ${errorMessage}`);
+                }
+
+                // For 400 errors and request errors, retry with cleanup
+                if (is400Error) {
+                  if (process.env.DEBUG_MCP) {
+                    console.warn(`[MCP ${wrapped.name}] Detected request error, will retry with cleaned up query...`);
+                  }
+                  // Wait before retry with exponential backoff
+                  await new Promise(resolve => setTimeout(resolve, RETRY_DELAY_MS * (attempt + 1)));
+                } else {
+                  // For other errors, just retry with a short delay
+                  await new Promise(resolve => setTimeout(resolve, RETRY_DELAY_MS));
+                }
+              }
             }
+
+            // This should never be reached, but just in case
+            throw new Error(`Error calling MCP tool ${tool.name}: ${lastError?.message || 'Unknown error'}`);
           },
           renderResultForAssistant: (data: any) => {
             if (typeof data === 'string') return data;

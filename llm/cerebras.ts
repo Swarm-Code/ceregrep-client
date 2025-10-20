@@ -95,9 +95,30 @@ export async function queryCerebras(
   for (const msg of messages) {
     if (msg.message.role === 'user') {
       const content = msg.message.content;
+
+      // Handle user message content - could be string or structured content
+      let userContent: string;
+      if (typeof content === 'string') {
+        userContent = content;
+      } else if (Array.isArray(content)) {
+        // Extract text from structured content (e.g., tool results)
+        userContent = content
+          .map((item: any) => {
+            if (typeof item === 'string') return item;
+            if (item.type === 'text') return item.text;
+            if (item.type === 'tool_result') {
+              return `Tool result: ${typeof item.content === 'string' ? item.content : JSON.stringify(item.content)}`;
+            }
+            return JSON.stringify(item);
+          })
+          .join('\n');
+      } else {
+        userContent = JSON.stringify(content);
+      }
+
       apiMessages.push({
         role: 'user',
-        content: typeof content === 'string' ? content : JSON.stringify(content),
+        content: userContent,
       });
     } else if (msg.message.role === 'assistant') {
       const content = msg.message.content;
@@ -122,9 +143,10 @@ export async function queryCerebras(
         .join('\n');
 
       if (toolCalls.length > 0) {
+        // When there are tool calls, content should be either text or empty string (not null)
         apiMessages.push({
           role: 'assistant',
-          content: textContent || null,
+          content: textContent || '',
           tool_calls: toolCalls,
         });
       } else {
@@ -229,6 +251,14 @@ export async function queryCerebras(
       top_p: options.top_p ?? 0.8,
       max_tokens: 100000,
     }, null, 2));
+
+    // Log detailed formatted messages and tools for debugging malformed requests
+    if (process.env.DEBUG_MCP || process.env.DEBUG_CEREBRAS) {
+      console.error('\n=== DETAILED REQUEST DEBUG ===');
+      console.error('Formatted API messages:', JSON.stringify(apiMessages, null, 2));
+      console.error('Formatted API tools:', JSON.stringify(apiTools, null, 2));
+      console.error('=== END DEBUG ===\n');
+    }
 
     throw error;
   }
