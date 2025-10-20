@@ -22,6 +22,7 @@ import { checkForUpdates, formatUpdateNotification } from '../utils/version-chec
 import { runDiagnostics, formatDiagnostics } from '../utils/doctor.js';
 import { checkExecutablePermissions, formatPermissionError } from '../utils/permission-check.js';
 import { execSync } from 'child_process';
+import { createAgentCommand } from './commands/agent.js';
 
 // Check permissions on startup
 const permCheck = checkExecutablePermissions();
@@ -568,5 +569,8 @@ mcpCommand
       process.exit(1);
     }
   });
+
+// Agent management commands
+program.addCommand(createAgentCommand());
 
 program.parse();

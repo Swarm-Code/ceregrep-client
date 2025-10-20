@@ -152,6 +152,91 @@ Query ceregrep to find context in a codebase.
 - "Find files that handle database connections"
 - "Analyze the project architecture"
 
+### Agent Tools (7 Specialized Agents)
+
+**All ceregrep agents are automatically exposed as MCP tools!** External systems like Claude Code can invoke specialized agents directly.
+
+**Available agents:**
+
+1. **agent_debug_agent** - Debugging expert
+   - Analyzes error messages and stack traces
+   - Identifies root causes of bugs
+   - Suggests fixes with explanations
+
+2. **agent_context_agent** - Context discovery specialist
+   - Explores codebases systematically
+   - Maps architecture and code flows
+   - Provides comprehensive context
+
+3. **agent_postgres_agent** - PostgreSQL specialist
+   - Database schema analysis
+   - Query optimization
+   - SQL best practices
+
+4. **agent_review_agent** - Code review expert
+   - Reviews code for quality and best practices
+   - Identifies security vulnerabilities
+   - Suggests improvements
+
+5. **agent_test_agent** - Test writing specialist
+   - Writes comprehensive unit/integration tests
+   - Identifies test coverage gaps
+   - Follows testing best practices
+
+6. **agent_docs_agent** - Documentation expert
+   - Generates API documentation
+   - Writes README files and guides
+   - Creates clear, comprehensive docs
+
+7. **agent_orchestrator_agent** - Meta-agent coordinator
+   - Coordinates multiple specialized agents
+   - Breaks down complex problems
+   - Synthesizes responses from agents
+
+**Parameters (all agents):**
+- `prompt` (required): The prompt/query to send to the agent
+- `cwd` (optional): Working directory to run in
+- `model` (optional): LLM model to use
+- `verbose` (optional): Enable verbose output
+
+**Example usage:**
+- `agent_debug_agent`: "Why is my authentication failing with a 401 error?"
+- `agent_context_agent`: "Explain the payment processing system architecture"
+- `agent_review_agent`: "Review the authentication middleware for security issues"
+
+### Example: Using Agents from Claude Code
+
+Once you've added ceregrep-mcp to Claude Code, you can ask Claude to use specialized agents:
+
+**User:** "Use the debug-agent to investigate why login is returning 401 errors"
+
+**Claude Code:** (Sees `agent_debug_agent` as available tool, invokes it)
+
+The debug agent will:
+1. Explore your authentication code
+2. Check error handling patterns
+3. Analyze JWT validation logic
+4. Provide specific debugging guidance
+
+**Response format:**
+```
+## Debug Agent Response
+
+**Prompt:** Investigate why login is returning 401 errors
+
+I've analyzed your authentication system. Here's what I found:
+
+1. JWT Token Validation (src/auth/middleware.ts:45)
+   - The token expiration check is failing
+   - Issue: Clock skew between server and client
+
+2. Suggested Fix:
+   - Add a 30-second leeway to token validation
+   - Update JWT_VERIFY_OPTIONS to include clockTolerance
+
+[... detailed debugging context ...]
+```
+
 ## How It Works
 
 1. Agent sends a natural language query to ceregrep_query tool
@@ -189,6 +274,18 @@ mcp-server/
 2. Inherit from `BaseTool`
 3. Implement `name`, `description`, `input_schema`, and `execute()`
 4. Restart server - tool is auto-discovered!
+
+## Agent Discovery and Caching
+
+The MCP server automatically discovers agents by running `ceregrep agent list --json`. To optimize performance:
+
+- **Agent list is cached for 5 minutes** - New agents will be visible within 5 minutes without restarting the MCP server
+- **Cache refreshes automatically** - After 5 minutes, the agent list is refreshed on the next tool list request
+- **Manual refresh** - Restart the MCP server to immediately refresh the agent list
+
+This means you can:
+1. Create a new agent with `ceregrep agent init` or `ceregrep agent import`
+2. Use it in Claude Code within 5 minutes (or restart the MCP server for immediate availability)
 
 ## Troubleshooting
 
