@@ -22,7 +22,7 @@ export const MessageList: React.FC<MessageListProps> = ({ messages, isStreaming 
 
       {isStreaming && (
         <Box marginTop={1}>
-          <Text color="cyan">● Thinking...</Text>
+          <Text bold color="cyan">◉ Thinking...</Text>
         </Box>
       )}
     </Box>
@@ -41,8 +41,12 @@ const MessageItem: React.FC<MessageItemProps> = ({ message }) => {
 
     return (
       <Box flexDirection="column" marginBottom={1}>
-        <Text bold color="blue">You:</Text>
-        <Text>{content || '(empty message)'}</Text>
+        <Box>
+          <Text bold color="blue">▶ YOU</Text>
+        </Box>
+        <Box paddingLeft={2}>
+          <Text color="white">{content || '(empty message)'}</Text>
+        </Box>
       </Box>
     );
   }
@@ -58,19 +62,23 @@ const MessageItem: React.FC<MessageItemProps> = ({ message }) => {
 
     return (
       <Box flexDirection="column" marginBottom={1}>
-        <Text bold color="green">Assistant:</Text>
+        <Box>
+          <Text bold color="magenta">◀ ASSISTANT</Text>
+        </Box>
 
         {/* Display text content */}
-        {textBlocks.map((block: any, index: number) => (
-          <Text key={index}>{block.text}</Text>
-        ))}
+        <Box flexDirection="column" paddingLeft={2}>
+          {textBlocks.map((block: any, index: number) => (
+            <Text key={index} color="white">{block.text}</Text>
+          ))}
+        </Box>
 
         {/* Display tool calls */}
         {toolUseBlocks.length > 0 && (
-          <Box flexDirection="column" marginTop={1}>
+          <Box flexDirection="column" marginTop={1} paddingLeft={2}>
             {toolUseBlocks.map((block: any, index: number) => (
-              <Box key={index} marginLeft={2}>
-                <Text color="yellow">🔧 {block.name}</Text>
+              <Box key={index}>
+                <Text color="cyan">⚙ {block.name}</Text>
               </Box>
             ))}
           </Box>

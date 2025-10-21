@@ -44,7 +44,7 @@ export const ConversationList: React.FC<ConversationListProps> = ({ onSelect, on
   if (loading) {
     return (
       <Box>
-        <Text color="cyan">Loading conversations...</Text>
+        <Text color="cyan" bold>◉ Loading conversations...</Text>
       </Box>
     );
   }
@@ -60,12 +60,12 @@ export const ConversationList: React.FC<ConversationListProps> = ({ onSelect, on
   if (conversations.length === 0) {
     return (
       <Box flexDirection="column">
-        <Text bold color="cyan">Conversations</Text>
+        <Text bold color="magenta">CONVERSATIONS</Text>
         <Box marginTop={1}>
-          <Text dimColor>No saved conversations</Text>
+          <Text color="white">No saved conversations</Text>
         </Box>
         <Box marginTop={1}>
-          <Text dimColor>Press Ctrl+L to go back</Text>
+          <Text color="blue">Press Ctrl+L to go back</Text>
         </Box>
       </Box>
     );
@@ -74,7 +74,7 @@ export const ConversationList: React.FC<ConversationListProps> = ({ onSelect, on
   return (
     <Box flexDirection="column">
       <Box marginBottom={1}>
-        <Text bold color="cyan">Select Conversation</Text>
+        <Text bold color="magenta">SELECT CONVERSATION</Text>
       </Box>
       <SelectInput items={items} onSelect={handleSelect} />
     </Box>
