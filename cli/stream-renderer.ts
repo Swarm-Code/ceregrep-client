@@ -10,25 +10,95 @@ import { Message } from '../core/messages.js';
 export class StreamRenderer {
   private spinner: Ora | null = null;
   private currentToolCount = 0;
+  private verbose: boolean;
+  private accumulatedMessages: Message[] = [];
+
+  constructor(verbose: boolean = false) {
+    this.verbose = verbose;
+  }
 
   /**
    * Start the initial query spinner
    */
   startQuery() {
-    this.spinner = ora({
-      text: chalk.blue('Initializing agent...'),
-      color: 'cyan',
-    }).start();
+    if (this.verbose) {
+      this.spinner = ora({
+        text: chalk.blue('Initializing agent...'),
+        color: 'cyan',
+      }).start();
+    } else {
+      this.spinner = ora({
+        text: chalk.blue('Processing...'),
+        color: 'cyan',
+      }).start();
+    }
+  }
+
+  /**
+   * Show the user's prompt with formatting
+   */
+  showPrompt(prompt: string) {
+    console.log();
+    console.log(chalk.bold.blueBright('Prompt:'), chalk.white(prompt));
+    console.log();
   }
 
   /**
    * Handle incoming message from agent
    */
   handleMessage(message: Message) {
+    // Always accumulate messages for final response synthesis
+    this.accumulatedMessages.push(message);
+
+    // Show ghost commands in non-verbose mode, full details in verbose
     if (message.type === 'assistant') {
-      this.handleAssistantMessage(message);
+      if (this.verbose) {
+        this.handleAssistantMessage(message);
+      } else {
+        this.showGhostCommands(message);
+      }
     } else if (message.type === 'user') {
-      this.handleToolResult(message);
+      if (this.verbose) {
+        this.handleToolResult(message);
+      }
+    }
+  }
+
+  /**
+   * Show subtle hints of what tools are being executed (non-verbose mode)
+   */
+  private showGhostCommands(message: Message) {
+    if (message.type !== 'assistant') return;
+
+    const content = Array.isArray(message.message.content)
+      ? message.message.content
+      : [message.message.content];
+
+    // Extract tool use blocks
+    const toolUseBlocks = content.filter((c: any) => c.type === 'tool_use');
+
+    if (toolUseBlocks.length > 0) {
+      // Update spinner with ghost hints
+      const toolNames = toolUseBlocks.map((t: any) => {
+        const toolName = t.name;
+        const input = t.input;
+
+        // Create subtle hint based on tool type
+        if (toolName === 'Bash' && input.command) {
+          const cmd = input.command.length > 40
+            ? input.command.substring(0, 40) + '...'
+            : input.command;
+          return chalk.dim(`bash: ${cmd}`);
+        } else if (toolName === 'Grep' && input.pattern) {
+          return chalk.dim(`grep: ${input.pattern}`);
+        } else {
+          return chalk.dim(toolName);
+        }
+      }).join(chalk.dim(', '));
+
+      if (this.spinner) {
+        this.spinner.text = chalk.blue('Processing... ') + chalk.dim('[') + toolNames + chalk.dim(']');
+      }
     }
   }
 
@@ -141,6 +211,68 @@ export class StreamRenderer {
   }
 
   /**
+   * Synthesize final response from accumulated messages
+   * Creates comprehensive, granular response with extreme context
+   */
+  private synthesizeResponse(): string {
+    // Extract all assistant messages
+    const assistantMessages = this.accumulatedMessages.filter(m => m.type === 'assistant');
+
+    // Collect all text blocks
+    const allTextBlocks: string[] = [];
+    const toolsExecuted: Array<{name: string, input: any}> = [];
+
+    for (const message of assistantMessages) {
+      if (message.type !== 'assistant') continue;
+
+      const content = Array.isArray(message.message.content)
+        ? message.message.content
+        : [message.message.content];
+
+      // Extract text
+      for (const block of content) {
+        if ((block as any).type === 'text') {
+          const text = (block as any).text;
+          if (text && text.trim()) {
+            allTextBlocks.push(text.trim());
+          }
+        }
+
+        // Track tool usage
+        if ((block as any).type === 'tool_use') {
+          toolsExecuted.push({
+            name: (block as any).name,
+            input: (block as any).input
+          });
+        }
+      }
+    }
+
+    // Combine all text with proper spacing
+    const fullResponse = allTextBlocks.join('\n\n');
+
+    // If no response, provide a default message
+    if (!fullResponse.trim()) {
+      return 'No response generated.';
+    }
+
+    return fullResponse;
+  }
+
+  /**
+   * Show final synthesized response with formatting
+   */
+  showFinalResponse() {
+    console.log();
+    console.log(chalk.bold.greenBright('Response:'));
+    console.log();
+
+    const response = this.synthesizeResponse();
+    console.log(chalk.white(response));
+    console.log();
+  }
+
+  /**
    * Finish rendering and show final status
    */
   finish(error?: Error) {
@@ -153,7 +285,7 @@ export class StreamRenderer {
       this.spinner = null;
     }
 
-    if (!error) {
+    if (!error && this.verbose) {
       console.log(chalk.dim('─'.repeat(process.stdout.columns || 80)));
     }
   }

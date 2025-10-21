@@ -67,7 +67,7 @@ program
   .option('--ultrathink', 'Enable ultrathink mode')
   .option('--max-thinking-tokens <tokens>', 'Maximum thinking tokens')
   .action(async (prompt: string, options: any) => {
-    const renderer = new StreamRenderer();
+    const renderer = new StreamRenderer(options.verbose || false);
 
     try {
       const configOverrides: any = {
@@ -98,6 +98,9 @@ program
 
       const client = new CeregrepClient(configOverrides);
 
+      // Show prompt header
+      renderer.showPrompt(prompt);
+
       renderer.startQuery();
 
       // Stream messages in real-time
@@ -117,6 +120,9 @@ program
 
       // Finish rendering
       renderer.finish();
+
+      // Show final synthesized response
+      renderer.showFinalResponse();
 
       // Show token usage
       if (stats.total > 0) {

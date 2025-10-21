@@ -17,28 +17,42 @@ const CEREBRAS_COST_PER_MILLION_TOKENS = 2.0; // Both input and output
  * Format tools for OpenAI/Cerebras API
  */
 function formatToolsForOpenAI(tools: Tool[]): OpenAI.Chat.ChatCompletionTool[] {
-  return tools.map((tool) => {
-    let inputSchema: any = tool.inputSchema || tool.input_schema;
+  return tools
+    .filter((tool) => {
+      // Validate tool has required fields
+      if (!tool.name) {
+        console.warn('⚠️  Skipping tool with null/undefined name:', tool);
+        return false;
+      }
+      return true;
+    })
+    .map((tool) => {
+      // Try to get schema from different sources
+      let inputSchema: any = tool.inputJSONSchema || tool.inputSchema || tool.input_schema;
 
-    // Convert Zod schema to JSON schema if needed
-    if (inputSchema && typeof inputSchema === 'object' && '_def' in inputSchema) {
-      inputSchema = zodToJsonSchema(inputSchema as z.ZodType);
-    }
+      // Convert Zod schema to JSON schema if needed
+      if (inputSchema && typeof inputSchema === 'object' && '_def' in inputSchema) {
+        inputSchema = zodToJsonSchema(inputSchema as z.ZodType);
+      }
 
-    // Ensure proper format
-    if (!inputSchema) {
-      inputSchema = { type: 'object', properties: {} };
-    }
+      // Ensure proper format - must have at least type and properties
+      if (!inputSchema || !inputSchema.type) {
+        inputSchema = {
+          type: 'object',
+          properties: inputSchema?.properties || {},
+          required: inputSchema?.required || []
+        };
+      }
 
-    return {
-      type: 'function' as const,
-      function: {
-        name: tool.name,
-        description: typeof tool.description === 'string' ? tool.description : 'A tool',
-        parameters: inputSchema,
-      },
-    };
-  });
+      return {
+        type: 'function' as const,
+        function: {
+          name: tool.name,
+          description: typeof tool.description === 'string' ? tool.description : 'A tool',
+          parameters: inputSchema,
+        },
+      };
+    });
 }
 
 /**
@@ -127,12 +141,20 @@ export async function queryCerebras(
       const contentArray = Array.isArray(content) ? content : [];
       const toolCalls = contentArray
         .filter((c: any) => c.type === 'tool_use')
+        .filter((c: any) => {
+          // Validate tool call has required fields
+          if (!c.id || !c.name) {
+            console.warn('⚠️  Skipping tool call with null/undefined id or name:', c);
+            return false;
+          }
+          return true;
+        })
         .map((c: any) => ({
           id: c.id,
           type: 'function' as const,
           function: {
             name: c.name,
-            arguments: JSON.stringify(c.input),
+            arguments: JSON.stringify(c.input || {}), // Default to empty object if input is null
           },
         }));
 
@@ -175,6 +197,24 @@ export async function queryCerebras(
     // Only add tools if there are any
     if (apiTools.length > 0) {
       requestParams.tools = apiTools;
+    }
+
+    // Debug: Log full request payload to catch null values
+    if (process.env.DEBUG_MCP || process.env.DEBUG_CEREBRAS) {
+      console.error('\n🔍 === CEREBRAS REQUEST DEBUG ===');
+      console.error('Full request params:', JSON.stringify(requestParams, null, 2));
+      console.error('=== END CEREBRAS REQUEST DEBUG ===\n');
+    }
+
+    // Validate no null values in critical fields
+    for (const msg of apiMessages) {
+      if (msg.role === 'assistant' && 'tool_calls' in msg && msg.tool_calls) {
+        for (const tc of msg.tool_calls) {
+          if (!tc.id || !tc.function?.name || tc.function?.arguments === null || tc.function?.arguments === undefined) {
+            throw new Error(`Invalid tool call detected: id=${tc.id}, name=${tc.function?.name}, args=${tc.function?.arguments}`);
+          }
+        }
+      }
     }
 
     const response = await client.chat.completions.create(requestParams);
@@ -234,29 +274,47 @@ export async function queryCerebras(
       } as any,
     };
   } catch (error: any) {
-    console.error('Error querying Cerebras API:', error);
+    console.error('\n❌ === CEREBRAS API ERROR ===');
+    console.error('Error type:', error.constructor.name);
+    console.error('Error message:', error.message);
+    console.error('Status code:', error.status);
 
-    // Try to extract error details from the response
+    // Try to get the actual API error response
     if (error.response) {
-      console.error('Response status:', error.response.status);
-      console.error('Response data:', error.response.data);
+      console.error('\n📡 API Response:');
+      console.error('  Status:', error.response.status);
+      console.error('  Headers:', JSON.stringify(error.response.headers, null, 2));
+      console.error('  Data:', JSON.stringify(error.response.data, null, 2));
     }
 
-    // Log request params for debugging
-    console.error('Request params:', JSON.stringify({
-      model,
-      messageCount: apiMessages.length,
-      toolCount: apiTools.length,
-      temperature: options.temperature ?? 0.7,
-      top_p: options.top_p ?? 0.8,
-      max_tokens: 100000,
-    }, null, 2));
+    // Try to extract error from the error object itself
+    if (error.error) {
+      console.error('\n🔍 Error details:', JSON.stringify(error.error, null, 2));
+    }
+
+    // Try reading the body if it's available
+    try {
+      const errorBody = await error.response?.text?.();
+      if (errorBody) {
+        console.error('\n📄 Response body:', errorBody);
+      }
+    } catch (e) {
+      // Ignore if we can't read the body
+    }
+
+    console.error('\n📊 Request summary:');
+    console.error('  Model:', model);
+    console.error('  Messages:', apiMessages.length);
+    console.error('  Tools:', apiTools.length);
+    console.error('  Temperature:', options.temperature ?? 0.7);
+    console.error('  Top P:', options.top_p ?? 0.8);
+    console.error('  Max tokens:', 100000);
 
     // Log detailed formatted messages and tools for debugging malformed requests
     if (process.env.DEBUG_MCP || process.env.DEBUG_CEREBRAS) {
-      console.error('\n=== DETAILED REQUEST DEBUG ===');
-      console.error('Formatted API messages:', JSON.stringify(apiMessages, null, 2));
-      console.error('Formatted API tools:', JSON.stringify(apiTools, null, 2));
+      console.error('\n=== FULL REQUEST DEBUG ===');
+      console.error('API messages:', JSON.stringify(apiMessages, null, 2));
+      console.error('\nAPI tools:', JSON.stringify(apiTools, null, 2));
       console.error('=== END DEBUG ===\n');
     }
 
