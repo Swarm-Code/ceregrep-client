@@ -18,6 +18,17 @@ from tool_discovery import tool_discovery
 # Debug flag
 DEBUG_MCP = os.getenv("DEBUG_MCP", "").lower() in ("1", "true", "yes")
 
+# Import agent tools from ceregrep_mcp package
+try:
+    from ceregrep_mcp.tools.agent_tools import agent_tool_generator
+    HAS_AGENT_TOOLS = True
+    if DEBUG_MCP:
+        print("[Ceregrep MCP] Agent tools available", file=sys.stderr, flush=True)
+except ImportError:
+    HAS_AGENT_TOOLS = False
+    if DEBUG_MCP:
+        print("[Ceregrep MCP] Agent tools not available", file=sys.stderr, flush=True)
+
 if DEBUG_MCP:
     print("[Ceregrep MCP] Initializing server", file=sys.stderr, flush=True)
 
@@ -32,11 +43,23 @@ if DEBUG_MCP:
 
 @app.list_tools()
 async def handle_list_tools() -> list[Tool]:
-    """List available tools."""
+    """List available tools including agents."""
     try:
         # Refresh tool discovery in case new tools were added
         current_tools = tool_discovery.discover_tools()
-        return [tool.to_tool() for tool in current_tools.values()]
+
+        # Add agent tools if available
+        if HAS_AGENT_TOOLS:
+            agent_tools = agent_tool_generator.discover_agent_tools()
+            all_tools = {**current_tools, **agent_tools}
+            if DEBUG_MCP:
+                print(f"[Ceregrep MCP] Exposing {len(current_tools)} regular tools + {len(agent_tools)} agent tools", file=sys.stderr, flush=True)
+        else:
+            all_tools = current_tools
+            if DEBUG_MCP:
+                print(f"[Ceregrep MCP] Exposing {len(current_tools)} regular tools only", file=sys.stderr, flush=True)
+
+        return [tool.to_tool() for tool in all_tools.values()]
     except Exception as e:
         if DEBUG_MCP:
             print(f"[Ceregrep MCP] Error listing tools: {e}", file=sys.stderr, flush=True)
@@ -45,15 +68,25 @@ async def handle_list_tools() -> list[Tool]:
 
 @app.call_tool()
 async def handle_call_tool(name: str, arguments: dict) -> list[TextContent]:
-    """Handle tool calls."""
+    """Handle tool calls including agent invocations."""
     try:
+        # Check regular tools first
         tool = tool_discovery.get_tool(name)
         if tool:
             if DEBUG_MCP:
-                print(f"[Ceregrep MCP] Calling tool: {name}", file=sys.stderr, flush=True)
+                print(f"[Ceregrep MCP] Calling regular tool: {name}", file=sys.stderr, flush=True)
             return await tool.execute(arguments)
-        else:
-            raise ValueError(f"Unknown tool: {name}")
+
+        # Check agent tools if available
+        if HAS_AGENT_TOOLS:
+            agent_tools = agent_tool_generator.discover_agent_tools()
+            agent_tool = agent_tools.get(name)
+            if agent_tool:
+                if DEBUG_MCP:
+                    print(f"[Ceregrep MCP] Calling agent tool: {name}", file=sys.stderr, flush=True)
+                return await agent_tool.execute(arguments)
+
+        raise ValueError(f"Unknown tool: {name}")
     except Exception as e:
         if DEBUG_MCP:
             print(f"[Ceregrep MCP] Error calling tool {name}: {e}", file=sys.stderr, flush=True)
