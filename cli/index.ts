@@ -577,6 +577,25 @@ mcpCommand
     }
   });
 
+// TUI command
+program
+  .command('tui')
+  .description('Start the interactive TUI interface')
+  .option('-c, --conversation <id>', 'Load a specific conversation')
+  .option('-a, --agent <id>', 'Start with a specific agent')
+  .action(async (options: any) => {
+    try {
+      const { startTUI } = await import('../tui/index.js');
+      startTUI({
+        conversationId: options.conversation,
+        agentId: options.agent,
+      });
+    } catch (error) {
+      console.error('Error:', error instanceof Error ? error.message : String(error));
+      process.exit(1);
+    }
+  });
+
 // Agent management commands
 program.addCommand(createAgentCommand());
 
