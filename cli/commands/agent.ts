@@ -4,6 +4,7 @@
  */
 
 import { Command } from 'commander';
+import chalk from 'chalk';
 import {
   getAgent,
   listAgents,
@@ -137,24 +138,42 @@ export function createAgentCommand(): Command {
         const showGlobal = options.scope === 'all' || options.scope === 'global';
         const showProject = options.scope === 'all' || options.scope === 'project';
 
+        // Color palette for agents
+        const colors = [
+          chalk.cyan,
+          chalk.magenta,
+          chalk.yellow,
+          chalk.blue,
+          chalk.green,
+          chalk.red,
+        ];
+
         if (showGlobal && agents.global.length > 0) {
-          console.log('Global Agents:');
-          for (const agent of agents.global) {
-            console.log(`  • ${agent.id} - ${agent.description}`);
-          }
+          console.log(chalk.bold.white('Global Agents:'));
           console.log();
+          agents.global.forEach((agent, index) => {
+            const color = colors[index % colors.length];
+            console.log(color.bold(`  ◆ ${agent.name}`));
+            console.log(chalk.dim(`    ${agent.id}`));
+            console.log(chalk.white(`    ${agent.description}`));
+            console.log();
+          });
         }
 
         if (showProject && agents.project.length > 0) {
-          console.log('Project Agents:');
-          for (const agent of agents.project) {
-            console.log(`  • ${agent.id} - ${agent.description}`);
-          }
+          console.log(chalk.bold.white('Project Agents:'));
           console.log();
+          agents.project.forEach((agent, index) => {
+            const color = colors[index % colors.length];
+            console.log(color.bold(`  ◆ ${agent.name}`));
+            console.log(chalk.dim(`    ${agent.id}`));
+            console.log(chalk.white(`    ${agent.description}`));
+            console.log();
+          });
         }
 
         if (agents.global.length === 0 && agents.project.length === 0) {
-          console.log('No agents found. Run "ceregrep agent init" to install default templates.');
+          console.log(chalk.yellow('No agents found. Run "ceregrep agent init" to install default templates.'));
         }
 
         process.exit(0);

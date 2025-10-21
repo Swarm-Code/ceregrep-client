@@ -23,6 +23,7 @@ import { runDiagnostics, formatDiagnostics } from '../utils/doctor.js';
 import { checkExecutablePermissions, formatPermissionError } from '../utils/permission-check.js';
 import { execSync } from 'child_process';
 import { createAgentCommand } from './commands/agent.js';
+import { createCompletionCommand } from './commands/completion.js';
 
 // Check permissions on startup
 const permCheck = checkExecutablePermissions();
@@ -578,5 +579,8 @@ mcpCommand
 
 // Agent management commands
 program.addCommand(createAgentCommand());
+
+// Shell completion commands
+program.addCommand(createCompletionCommand());
 
 program.parse();
