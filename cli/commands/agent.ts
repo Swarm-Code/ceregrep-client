@@ -40,7 +40,7 @@ export function createAgentCommand(): Command {
     .option('--thinking', 'Enable extended thinking mode')
     .option('--ultrathink', 'Enable ultrathink mode')
     .action(async (agentId: string, prompt: string, options: any) => {
-      const renderer = new StreamRenderer();
+      const renderer = new StreamRenderer(options.verbose || false);
 
       try {
         // Load agent config
@@ -49,6 +49,9 @@ export function createAgentCommand(): Command {
           console.error(`Error: Agent "${agentId}" not found`);
           process.exit(1);
         }
+
+        // Show prompt header
+        renderer.showPrompt(prompt);
 
         renderer.startQuery();
 
@@ -95,6 +98,9 @@ export function createAgentCommand(): Command {
 
         // Finish rendering
         renderer.finish();
+
+        // Show final synthesized response
+        renderer.showFinalResponse();
 
         // Show token usage
         if (stats.total > 0) {
