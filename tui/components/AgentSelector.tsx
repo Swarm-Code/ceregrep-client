@@ -55,7 +55,7 @@ export const AgentSelector: React.FC<AgentSelectorProps> = ({
   if (loading) {
     return (
       <Box>
-        <Text color="cyan">Loading agents...</Text>
+        <Text color="cyan" bold>◉ Loading agents...</Text>
       </Box>
     );
   }
@@ -72,7 +72,7 @@ export const AgentSelector: React.FC<AgentSelectorProps> = ({
   return (
     <Box flexDirection="column">
       <Box marginBottom={1}>
-        <Text bold color="cyan">Select Agent</Text>
+        <Text bold color="magenta">SELECT AGENT</Text>
       </Box>
       <SelectInput items={items} onSelect={handleSelect} />
     </Box>

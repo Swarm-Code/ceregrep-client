@@ -19,32 +19,38 @@ export const StatusBar: React.FC<StatusBarProps> = ({
   isStreaming,
   view,
 }) => {
+  // Get terminal width for line
+  const width = process.stdout.columns || 80;
+  const line = '─'.repeat(width);
+
   return (
-    <Box
-      borderStyle="round"
-      borderColor="cyan"
-      paddingX={1}
-      marginBottom={1}
-    >
-      <Box flexGrow={1}>
-        <Text bold color="cyan">Ceregrep TUI</Text>
-        <Text dimColor> | </Text>
-        <Text>{conversationTitle}</Text>
-        {agentId && (
-          <>
-            <Text dimColor> | </Text>
-            <Text color="magenta">Agent: {agentId}</Text>
-          </>
-        )}
-        {isStreaming && (
-          <>
-            <Text dimColor> | </Text>
-            <Text color="yellow">● Streaming</Text>
-          </>
-        )}
-        <Text dimColor> | </Text>
-        <Text dimColor>View: {view}</Text>
+    <Box flexDirection="column" marginBottom={1}>
+      {/* Top line */}
+      <Text color="blue">{line}</Text>
+
+      {/* Status content */}
+      <Box paddingX={1} paddingY={0}>
+        <Box flexGrow={1}>
+          <Text bold color="blue">CEREGREP</Text>
+          <Text color="white"> │ </Text>
+          <Text color="white">{conversationTitle}</Text>
+          {agentId && (
+            <>
+              <Text color="white"> │ </Text>
+              <Text color="magenta">{agentId}</Text>
+            </>
+          )}
+          {isStreaming && (
+            <>
+              <Text color="white"> │ </Text>
+              <Text color="cyan">◉ STREAMING</Text>
+            </>
+          )}
+        </Box>
       </Box>
+
+      {/* Bottom line */}
+      <Text color="blue">{line}</Text>
     </Box>
   );
 };

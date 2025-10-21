@@ -265,23 +265,35 @@ export const App: React.FC<AppProps> = ({ initialConversationId, initialAgentId 
           <>
             {/* Help Section */}
             {showHelp && (
-              <Box marginBottom={1} borderStyle="round" borderColor="cyan" padding={1}>
+              <Box marginBottom={1} padding={1}>
                 <Box flexDirection="column">
-                  <Text bold color="cyan">Commands:</Text>
-                  <Text>/new [title] - Create new conversation</Text>
-                  <Text>/agent [id] - Switch agent</Text>
-                  <Text>/checkpoint [description] - Create checkpoint</Text>
-                  <Text>/restore &lt;checkpoint-id&gt; - Restore to checkpoint</Text>
-                  <Text>/list - Show conversations</Text>
-                  <Text>/clear - Clear current conversation</Text>
-                  <Text>/help - Toggle this help</Text>
-                  <Text>/exit - Exit TUI</Text>
+                  <Text bold color="magenta">COMMANDS:</Text>
+                  <Text color="blue">/new [title]</Text>
+                  <Text color="white">  Create new conversation</Text>
+                  <Text color="blue">/agent [id]</Text>
+                  <Text color="white">  Switch agent</Text>
+                  <Text color="blue">/checkpoint [description]</Text>
+                  <Text color="white">  Create checkpoint</Text>
+                  <Text color="blue">/restore &lt;checkpoint-id&gt;</Text>
+                  <Text color="white">  Restore to checkpoint</Text>
+                  <Text color="blue">/list</Text>
+                  <Text color="white">  Show conversations</Text>
+                  <Text color="blue">/clear</Text>
+                  <Text color="white">  Clear current conversation</Text>
+                  <Text color="blue">/help</Text>
+                  <Text color="white">  Toggle this help</Text>
+                  <Text color="blue">/exit</Text>
+                  <Text color="white">  Exit TUI</Text>
                   <Text></Text>
-                  <Text bold color="cyan">Shortcuts:</Text>
-                  <Text>Ctrl+L - Toggle conversations list</Text>
-                  <Text>Ctrl+A - Toggle agent selector</Text>
-                  <Text>Ctrl+H - Toggle help</Text>
-                  <Text>Ctrl+C - Exit</Text>
+                  <Text bold color="magenta">SHORTCUTS:</Text>
+                  <Text color="cyan">Ctrl+L</Text>
+                  <Text color="white">  Toggle conversations list</Text>
+                  <Text color="cyan">Ctrl+A</Text>
+                  <Text color="white">  Toggle agent selector</Text>
+                  <Text color="cyan">Ctrl+H</Text>
+                  <Text color="white">  Toggle help</Text>
+                  <Text color="cyan">Ctrl+C</Text>
+                  <Text color="white">  Exit</Text>
                 </Box>
               </Box>
             )}
@@ -294,7 +306,7 @@ export const App: React.FC<AppProps> = ({ initialConversationId, initialAgentId 
             {/* Error Display */}
             {error && (
               <Box marginBottom={1}>
-                <Text color="red">Error: {error}</Text>
+                <Text bold color="red">⚠ {error}</Text>
               </Box>
             )}
 
