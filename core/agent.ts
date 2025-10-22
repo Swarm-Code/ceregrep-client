@@ -18,6 +18,8 @@ import {
   INTERRUPT_MESSAGE_FOR_TOOL_USE,
 } from './messages.js';
 import { countTokens, shouldCompact } from './tokens.js';
+import { executePreToolUseHooks, executePostToolUseHooks } from './hooks.js';
+import { getConfig } from '../config/loader.js';
 
 export type CanUseToolFn = (
   toolName: string,
@@ -204,22 +206,78 @@ async function* runToolsSerially(
       continue;
     }
 
-    // Execute tool
+    // Execute tool with pre/post hooks
     try {
       if (!tool.call) {
         throw new Error(`Tool ${tool.name} does not have a call method`);
       }
 
-      // Execute tool and collect results
-      let lastResult: any = null;
-      for await (const result of tool.call(toolUseMessage.input, toolUseContext, canUseTool)) {
-        if (result.type === 'result') {
-          lastResult = result;
-        }
+      // Get config for hooks (use cached config or load it)
+      const config = toolUseContext.config || getConfig();
+
+      // Get tool description for hook context
+      const toolDescription = typeof tool.description === 'function'
+        ? await tool.description()
+        : tool.description;
+
+      // Execute PreToolUse hooks
+      const preHookResult = await executePreToolUseHooks(config, {
+        toolName: tool.name,
+        toolInput: toolUseMessage.input as Record<string, unknown>,
+        toolDescription,
+      });
+
+      // If hook blocked the tool, return error
+      if (preHookResult.blocked) {
+        console.log(`[AGENT] Tool ${tool.name} blocked by PreToolUse hook: ${preHookResult.message}`);
+        yield createUserMessage([
+          {
+            type: 'tool_result',
+            tool_use_id: toolUseMessage.id,
+            content: `Blocked by hook: ${preHookResult.message}`,
+            is_error: true,
+          },
+        ]);
+        continue;
       }
 
-      if (!lastResult) {
-        throw new Error(`Tool ${tool.name} did not return a result`);
+      // Use modified input if hook provided it
+      const finalInput = preHookResult.modifiedInput || toolUseMessage.input;
+
+      // Execute tool and collect results
+      let lastResult: any = null;
+      let executionError: any = null;
+
+      try {
+        for await (const result of tool.call(finalInput, toolUseContext, canUseTool)) {
+          if (result.type === 'result') {
+            lastResult = result;
+          }
+        }
+
+        if (!lastResult) {
+          throw new Error(`Tool ${tool.name} did not return a result`);
+        }
+      } catch (error) {
+        executionError = error;
+      }
+
+      // Execute PostToolUse hooks (fire and forget, don't wait)
+      executePostToolUseHooks(config, {
+        toolName: tool.name,
+        toolInput: finalInput as Record<string, unknown>,
+        toolDescription,
+        result: lastResult?.data,
+        error: executionError ? (executionError instanceof Error ? executionError.message : String(executionError)) : undefined,
+      }).catch((err) => {
+        if (toolUseContext.options.debug) {
+          console.error(`[AGENT] PostToolUse hook error for ${tool.name}:`, err);
+        }
+      });
+
+      // If tool execution failed, throw the error
+      if (executionError) {
+        throw executionError;
       }
 
       // Format result for assistant
@@ -227,11 +285,15 @@ async function* runToolsSerially(
         ? tool.renderResultForAssistant(lastResult.data)
         : lastResult.resultForAssistant || JSON.stringify(lastResult.data);
 
+      // CRITICAL: Ensure content is never empty/null - causes 400 errors with Cerebras
+      const finalContent = typeof resultContent === 'string' ? resultContent : JSON.stringify(resultContent);
+      const safeContent = finalContent.trim() || 'Tool executed successfully (no output)';
+
       yield createUserMessage([
         {
           type: 'tool_result',
           tool_use_id: toolUseMessage.id,
-          content: typeof resultContent === 'string' ? resultContent : JSON.stringify(resultContent),
+          content: safeContent,
           is_error: false,
         },
       ]);

@@ -115,3 +115,10 @@ export function saveGlobalConfig(config: Partial<Config>): void {
     throw new Error(`Failed to save config to ${configPath}: ${error}`);
   }
 }
+
+/**
+ * Save config (alias for saveGlobalConfig)
+ */
+export function saveConfig(config: Partial<Config>): void {
+  saveGlobalConfig(config);
+}

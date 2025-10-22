@@ -6,6 +6,7 @@
 import { Tool } from '../../core/tool.js';
 import { Message, createUserMessage } from '../../core/messages.js';
 import { query as agentQuery, compact as agentCompact } from '../../core/agent.js';
+import { ContentBlockParam } from '@anthropic-ai/sdk/resources/index.mjs';
 import { getTools } from '../../tools/index.js';
 import { getConfig } from '../../config/loader.js';
 import { querySonnet, formatSystemPromptWithContext } from '../../llm/router.js';
@@ -22,6 +23,8 @@ export interface QueryOptions {
   compactionThreshold?: number; // Token threshold for auto-compaction (default 100k)
   enableThinking?: boolean; // Enable extended thinking mode
   ultrathinkMode?: boolean; // Enable ultrathink mode (more tokens)
+  abortController?: AbortController; // Optional abort controller for cancellation
+  systemPrompt?: string[]; // Custom system prompt (overrides default)
 }
 
 export interface QueryResult {
@@ -55,7 +58,7 @@ export class CeregrepClient {
   /**
    * Query the agent with a prompt
    */
-  async query(prompt: string, options: QueryOptions = {}): Promise<QueryResult> {
+  async query(prompt: string | ContentBlockParam[], options: QueryOptions = {}): Promise<QueryResult> {
     if (this.tools.length === 0) {
       await this.initialize();
     }
@@ -82,8 +85,8 @@ export class CeregrepClient {
     const userMessage = createUserMessage(prompt);
     this.messages.push(userMessage);
 
-    // System prompt
-    const systemPrompt = [
+    // System prompt (use custom if provided, otherwise default)
+    const systemPrompt = options.systemPrompt || [
       'You are a helpful AI assistant with access to bash and file search tools.',
       'Use the tools available to help the user accomplish their tasks.',
       '',
@@ -135,14 +138,15 @@ export class CeregrepClient {
         forkNumber: 0,
         messageLogName: 'sdk-query',
       },
-      abortController: new AbortController(),
+      abortController: options.abortController || new AbortController(),
       readFileTimestamps: {},
     };
 
-    // Execute query
+    // Execute query (pass a copy to avoid mutation issues)
     const queryMessages: Message[] = [];
+    const messagesCopy = [...this.messages];
     for await (const message of agentQuery(
-      this.messages,
+      messagesCopy,
       systemPrompt,
       context,
       canUseTool,
@@ -151,8 +155,10 @@ export class CeregrepClient {
       formatSystemPromptWithContext,
     )) {
       queryMessages.push(message);
-      this.messages.push(message);
     }
+
+    // Add all new messages to history after completion
+    this.messages.push(...queryMessages);
 
     return {
       messages: queryMessages,
@@ -163,7 +169,7 @@ export class CeregrepClient {
    * Query the agent with streaming message output
    * Yields messages in real-time as they are generated
    */
-  async* queryStream(prompt: string, options: QueryOptions = {}): AsyncGenerator<Message, void> {
+  async* queryStream(prompt: string | ContentBlockParam[], options: QueryOptions = {}): AsyncGenerator<Message, void> {
     if (this.tools.length === 0) {
       await this.initialize();
     }
@@ -190,8 +196,8 @@ export class CeregrepClient {
     const userMessage = createUserMessage(prompt);
     this.messages.push(userMessage);
 
-    // System prompt (same as query method)
-    const systemPrompt = [
+    // System prompt (use custom if provided, otherwise default)
+    const systemPrompt = options.systemPrompt || [
       'You are a helpful AI assistant with access to bash and file search tools.',
       'Use the tools available to help the user accomplish their tasks.',
       '',
@@ -242,13 +248,14 @@ export class CeregrepClient {
         forkNumber: 0,
         messageLogName: 'sdk-query-stream',
       },
-      abortController: new AbortController(),
+      abortController: options.abortController || new AbortController(),
       readFileTimestamps: {},
     };
 
-    // Execute query and yield messages in real-time
+    // Execute query and yield messages in real-time (pass a copy to avoid mutation issues)
+    const messagesCopy = [...this.messages];
     for await (const message of agentQuery(
-      this.messages,
+      messagesCopy,
       systemPrompt,
       context,
       canUseTool,
@@ -256,6 +263,7 @@ export class CeregrepClient {
       querySonnet,
       formatSystemPromptWithContext,
     )) {
+      // Add message to history in real-time so getHistory() returns current state
       this.messages.push(message);
       yield message;
     }

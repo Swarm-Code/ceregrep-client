@@ -12,6 +12,9 @@ import { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js';
 import {
   ListToolsResult,
   ListToolsResultSchema,
+  ListResourcesResultSchema,
+  ReadResourceResultSchema,
+  Resource,
 } from '@modelcontextprotocol/sdk/types.js';
 
 type McpName = string;
@@ -377,6 +380,91 @@ function formatMCPResult(result: any): string {
   }
 
   return JSON.stringify(result);
+}
+
+/**
+ * Get MCP resources from all connected servers
+ */
+export async function getMCPResources(): Promise<Array<Resource & { serverName: string }>> {
+  const clients = await connectToAllServers();
+  const resources: Array<Resource & { serverName: string }> = [];
+
+  for (const wrapped of clients) {
+    if (wrapped.type === 'failed') {
+      if (process.env.DEBUG_MCP) {
+        console.warn(`Skipping failed MCP server "${wrapped.name}": ${wrapped.error}`);
+      }
+      continue;
+    }
+
+    try {
+      const capabilities = await wrapped.client.getServerCapabilities?.();
+      if (!capabilities?.resources) {
+        continue;
+      }
+
+      const response = await wrapped.client.request(
+        { method: 'resources/list' },
+        ListResourcesResultSchema
+      );
+
+      const serverResources = response.resources || [];
+      for (const resource of serverResources) {
+        resources.push({
+          ...resource,
+          serverName: wrapped.name,
+        });
+      }
+    } catch (error) {
+      if (process.env.DEBUG_MCP) {
+        console.warn(
+          `Failed to get resources from MCP server "${wrapped.name}":`,
+          error instanceof Error ? error.message : String(error)
+        );
+      }
+    }
+  }
+
+  return resources;
+}
+
+/**
+ * Read a specific MCP resource
+ */
+export async function readMCPResource(
+  serverName: string,
+  uri: string
+): Promise<{ content: string; mimeType?: string }> {
+  const clients = await connectToAllServers();
+  const wrapped = clients.find((c) => c.name === serverName && c.type === 'connected');
+
+  if (!wrapped || wrapped.type !== 'connected') {
+    throw new Error(`MCP server "${serverName}" is not connected`);
+  }
+
+  try {
+    const response = await wrapped.client.request(
+      { method: 'resources/read', params: { uri } },
+      ReadResourceResultSchema
+    );
+
+    // Extract text content from the response
+    const textContent = response.contents
+      .filter((c: any) => c.type === 'text')
+      .map((c: any) => c.text)
+      .join('\n');
+
+    return {
+      content: textContent,
+      mimeType: response.contents[0]?.mimeType,
+    };
+  } catch (error) {
+    throw new Error(
+      `Failed to read resource "${uri}" from server "${serverName}": ${
+        error instanceof Error ? error.message : String(error)
+      }`
+    );
+  }
 }
 
 /**
