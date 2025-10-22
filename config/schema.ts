@@ -33,6 +33,26 @@ export const MCPServerConfigSchema = z.union([
 
 export type MCPServerConfig = z.infer<typeof MCPServerConfigSchema>;
 
+// Hook configuration schema
+export const HookConfigSchema = z.object({
+  matcher: z.string(), // Tool name pattern (e.g., "Bash", "Edit|Write", "*" for all)
+  hooks: z.array(
+    z.object({
+      type: z.literal('command'),
+      command: z.string(), // Shell command to execute
+    })
+  ),
+});
+
+export type HookConfig = z.infer<typeof HookConfigSchema>;
+
+export const HooksSchema = z.object({
+  PreToolUse: z.array(HookConfigSchema).optional(),
+  PostToolUse: z.array(HookConfigSchema).optional(),
+}).optional();
+
+export type Hooks = z.infer<typeof HooksSchema>;
+
 export const ConfigSchema = z.object({
   // Model configuration
   model: z.string().optional().default('claude-sonnet-4-20250514'),
@@ -55,6 +75,9 @@ export const ConfigSchema = z.object({
 
   // MCP servers
   mcpServers: z.record(MCPServerConfigSchema).optional(),
+
+  // Hooks configuration
+  hooks: HooksSchema,
 
   // Thinking mode settings (extended thinking)
   enableThinking: z.boolean().optional().default(false),

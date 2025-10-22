@@ -28,6 +28,7 @@
     "node_modules",
     "dist",
     "claude-source",
+    "claude-code-template",
     "**/*.spec.ts",
     "**/*.test.ts"
   ]

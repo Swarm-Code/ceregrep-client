@@ -71,6 +71,14 @@ program
     const renderer = new StreamRenderer(options.verbose || false);
 
     try {
+      // Enable debug environment variables if --debug flag is set
+      if (options.debug) {
+        process.env.DEBUG_CEREBRAS = '1';
+        process.env.DEBUG_MCP = '1';
+        process.env.DEBUG = '1';
+        console.log('🔍 Debug mode enabled - verbose output will be shown\n');
+      }
+
       const configOverrides: any = {
         model: options.model,
         verbose: options.verbose,
@@ -583,15 +591,116 @@ program
   .description('Start the interactive TUI interface')
   .option('-c, --conversation <id>', 'Load a specific conversation')
   .option('-a, --agent <id>', 'Start with a specific agent')
+  .option('-l, --log', 'Enable conversation logging to ~/.swarm-cli/logs/')
+  .option('--debug', 'Enable debug output')
   .action(async (options: any) => {
     try {
+      // Enable debug environment variables if --debug flag is set
+      if (options.debug) {
+        process.env.DEBUG_CEREBRAS = '1';
+        process.env.DEBUG_MCP = '1';
+        process.env.DEBUG = '1';
+        console.log('🔍 Debug mode enabled - verbose output will be shown\n');
+      }
+
       const { startTUI } = await import('../tui/index.js');
       startTUI({
         conversationId: options.conversation,
         agentId: options.agent,
+        enableLogging: options.log,
       });
     } catch (error) {
       console.error('Error:', error instanceof Error ? error.message : String(error));
+      process.exit(1);
+    }
+  });
+
+// TUI Query command (headless TUI for testing)
+program
+  .command('tui-query')
+  .description('Query using TUI mode system prompts (headless for testing)')
+  .argument('<prompt>', 'Prompt to send to the agent')
+  .option('-m, --mode <mode>', 'TUI mode: plan, act, auto, or debug (default: plan)', 'plan')
+  .option('--debug', 'Enable debug output')
+  .action(async (prompt: string, options: any) => {
+    const renderer = new StreamRenderer(false);
+
+    try {
+      // Enable debug environment variables if --debug flag is set
+      if (options.debug) {
+        process.env.DEBUG_CEREBRAS = '1';
+        process.env.DEBUG_MCP = '1';
+        process.env.DEBUG = '1';
+        console.log('🔍 Debug mode enabled - verbose output will be shown\n');
+      }
+
+      // Import TUI mode prompt logic
+      const { getModeSystemPrompt } = await import('../tui/mode-prompts.js');
+      const { getBackgroundAgent } = await import('../tui/background-agent.js');
+
+      // Validate mode
+      const validModes = ['plan', 'act', 'auto', 'debug'];
+      const mode = options.mode.toLowerCase();
+      if (!validModes.includes(mode)) {
+        console.error(`Error: Invalid mode "${options.mode}". Must be one of: ${validModes.join(', ')}`);
+        process.exit(1);
+      }
+
+      // Map lowercase mode to TUI AgentMode type
+      const agentMode = mode.toUpperCase() as 'PLAN' | 'ACT' | 'AUTO' | 'DEBUG';
+
+      // Get background context (git status, etc.)
+      const backgroundAgent = getBackgroundAgent();
+      const bgContext = await backgroundAgent.getContext([]);
+
+      // Get mode-specific system prompt
+      const modePrompt = getModeSystemPrompt(agentMode);
+
+      // Inject background context into system prompt
+      const contextLines = backgroundAgent.formatContextForPrompt(bgContext);
+      const fullPrompt = [...modePrompt, ...contextLines];
+
+      const client = new CeregrepClient({
+        debug: options.debug,
+      });
+
+      // Show prompt header
+      renderer.showPrompt(prompt);
+      console.log(`Mode: ${agentMode}\n`);
+
+      renderer.startQuery();
+
+      // Stream messages in real-time
+      for await (const message of client.queryStream(prompt, {
+        systemPrompt: fullPrompt,
+        debug: options.debug,
+      })) {
+        renderer.handleMessage(message);
+      }
+
+      // Get final token stats
+      const history = client.getHistory();
+      const stats = getTokenStats(history);
+
+      // Finish rendering
+      renderer.finish();
+
+      // Show final synthesized response
+      renderer.showFinalResponse();
+
+      // Show token usage
+      if (stats.total > 0) {
+        renderer.showTokenStats(stats);
+      }
+
+      // Clean up persistent shell to allow process to exit
+      PersistentShell.getInstance().close();
+      await disconnectAllServers();
+      process.exit(0);
+    } catch (error) {
+      renderer.finish(error instanceof Error ? error : new Error(String(error)));
+      PersistentShell.getInstance().close();
+      await disconnectAllServers();
       process.exit(1);
     }
   });

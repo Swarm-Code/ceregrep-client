@@ -1,0 +1,30 @@
+{
+  "model": "claude-sonnet-4-20250514",
+  "debug": true,
+  "verbose": true,
+
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "./hooks/example-pretool.sh"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "./hooks/example-posttool.sh"
+          }
+        ]
+      }
+    ]
+  }
+}
