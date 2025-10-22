@@ -19,6 +19,12 @@ interface SelectItem {
   value: string;
 }
 
+// Force exact colors (hex) to override terminal themes
+const BLUE = '#4169E1';
+const PURPLE = '#A855F7';
+const CYAN = '#22D3EE';
+const WHITE = '#FFFFFF';
+
 export const AgentSelector: React.FC<AgentSelectorProps> = ({
   currentAgentId,
   onSelect,
@@ -55,7 +61,7 @@ export const AgentSelector: React.FC<AgentSelectorProps> = ({
   if (loading) {
     return (
       <Box>
-        <Text color="cyan" bold>◉ Loading agents...</Text>
+        <Text color={CYAN} bold>◉ Loading agents...</Text>
       </Box>
     );
   }
@@ -72,7 +78,7 @@ export const AgentSelector: React.FC<AgentSelectorProps> = ({
   return (
     <Box flexDirection="column">
       <Box marginBottom={1}>
-        <Text bold color="magenta">SELECT AGENT</Text>
+        <Text bold color={PURPLE}>SELECT AGENT</Text>
       </Box>
       <SelectInput items={items} onSelect={handleSelect} />
     </Box>

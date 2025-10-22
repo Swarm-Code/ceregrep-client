@@ -13,6 +13,12 @@ interface MessageListProps {
   isStreaming: boolean;
 }
 
+// Force exact colors (hex) to override terminal themes
+const BLUE = '#4169E1';
+const PURPLE = '#A855F7';
+const CYAN = '#22D3EE';
+const WHITE = '#FFFFFF';
+
 export const MessageList: React.FC<MessageListProps> = ({ messages, isStreaming }) => {
   return (
     <Box flexDirection="column">
@@ -22,7 +28,7 @@ export const MessageList: React.FC<MessageListProps> = ({ messages, isStreaming 
 
       {isStreaming && (
         <Box marginTop={1}>
-          <Text bold color="cyan">◉ Thinking...</Text>
+          <Text bold color={CYAN}>◉ Thinking...</Text>
         </Box>
       )}
     </Box>
@@ -42,10 +48,10 @@ const MessageItem: React.FC<MessageItemProps> = ({ message }) => {
     return (
       <Box flexDirection="column" marginBottom={1}>
         <Box>
-          <Text bold color="blue">▶ YOU</Text>
+          <Text bold color={BLUE}>▶ YOU</Text>
         </Box>
         <Box paddingLeft={2}>
-          <Text color="white">{content || '(empty message)'}</Text>
+          <Text color={WHITE}>{content || '(empty message)'}</Text>
         </Box>
       </Box>
     );
@@ -63,13 +69,13 @@ const MessageItem: React.FC<MessageItemProps> = ({ message }) => {
     return (
       <Box flexDirection="column" marginBottom={1}>
         <Box>
-          <Text bold color="magenta">◀ ASSISTANT</Text>
+          <Text bold color={PURPLE}>◀ ASSISTANT</Text>
         </Box>
 
         {/* Display text content */}
         <Box flexDirection="column" paddingLeft={2}>
           {textBlocks.map((block: any, index: number) => (
-            <Text key={index} color="white">{block.text}</Text>
+            <Text key={index} color={WHITE}>{block.text}</Text>
           ))}
         </Box>
 
@@ -78,7 +84,7 @@ const MessageItem: React.FC<MessageItemProps> = ({ message }) => {
           <Box flexDirection="column" marginTop={1} paddingLeft={2}>
             {toolUseBlocks.map((block: any, index: number) => (
               <Box key={index}>
-                <Text color="cyan">⚙ {block.name}</Text>
+                <Text color={CYAN}>⚙ {block.name}</Text>
               </Box>
             ))}
           </Box>

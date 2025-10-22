@@ -42,6 +42,8 @@ export type UserMessage = {
   message: MessageParam;
   type: 'user';
   uuid: UUID;
+  id?: string; // Message ID for conversation navigation
+  timestamp?: number; // Message creation timestamp
   toolUseResult?: FullToolUseResult;
   displayContent?: string | ContentBlockParam[];
 };
@@ -54,6 +56,8 @@ export type AssistantMessage = {
   };
   type: 'assistant';
   uuid: UUID;
+  id?: string; // Message ID for conversation navigation
+  timestamp?: number; // Message creation timestamp
   isApiErrorMessage?: boolean;
 };
 
