@@ -1,8 +1,8 @@
-# Ceregrep Client
+# Swarm Scout
 
-[![npm version](https://img.shields.io/npm/v/ceregrep.svg)](https://www.npmjs.com/package/ceregrep)
-[![npm downloads](https://img.shields.io/npm/dm/ceregrep.svg)](https://www.npmjs.com/package/ceregrep)
-[![license](https://img.shields.io/npm/l/ceregrep.svg)](https://github.com/Swarm-Code/ceregrep-client/blob/master/LICENSE)
+[![npm version](https://img.shields.io/npm/v/swarm-scout.svg)](https://www.npmjs.com/package/swarm-scout)
+[![npm downloads](https://img.shields.io/npm/dm/swarm-scout.svg)](https://www.npmjs.com/package/swarm-scout)
+[![license](https://img.shields.io/npm/l/swarm-scout.svg)](https://github.com/Swarm-Code/swarm-scout/blob/master/LICENSE)
 
 A modular, headless agent framework with support for Bash, Ripgrep, and MCP (Model Context Protocol). Can be invoked via TypeScript SDK, Python SDK, or CLI. **Now available on npm!**
 
@@ -20,21 +20,21 @@ A modular, headless agent framework with support for Bash, Ripgrep, and MCP (Mod
 ### From npm
 
 ```bash
-npm install ceregrep
+npm install swarm-scout
 ```
 
 Or install globally for CLI usage:
 
 ```bash
-npm install -g ceregrep
+npm install -g swarm-scout
 ```
 
 ### From source (development)
 
 ```bash
 # Clone the repository
-git clone https://github.com/swarmcode/ceregrep-client.git
-cd ceregrep-client
+git clone https://github.com/Swarm-Code/swarm-scout.git
+cd swarm-scout
 
 # Install dependencies
 npm install
@@ -46,16 +46,16 @@ npm run build
 npm link
 ```
 
-After running `npm link`, you can use the `ceregrep` command anywhere in your system.
+After running `npm link`, you can use the `swarm-scout` command anywhere in your system.
 
 ## Quick Start
 
 ### TypeScript SDK
 
 ```typescript
-import { CeregrepClient } from 'ceregrep';
+import { SwarmScoutClient } from 'swarm-scout';
 
-const client = new CeregrepClient({
+const client = new SwarmScoutClient({
   model: 'claude-sonnet-4-20250514',
   apiKey: process.env.ANTHROPIC_API_KEY,
 });

@@ -1,12 +1,12 @@
 {
-  "name": "ceregrep",
-  "version": "0.2.2",
+  "name": "swarm-scout",
+  "version": "0.1.0",
   "description": "Headless agent framework with Bash, Ripgrep, and MCP support - invocable via TypeScript SDK, Python SDK, and CLI",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "bin": {
-    "ceregrep": "./dist/cli/index.js"
+    "swarm-scout": "./dist/cli/index.js"
   },
   "exports": {
     ".": {
@@ -23,8 +23,7 @@
     "copy-templates": "mkdir -p dist/agents/templates && cp -r agents/templates/*.json dist/agents/templates/",
     "dev": "tsc --watch",
     "clean": "rm -rf dist",
-    "prepublishOnly": "npm run clean && npm run build",
-    "postinstall": "node scripts/postinstall.cjs"
+    "prepublishOnly": "npm run clean && npm run build"
   },
   "keywords": [
     "agent",
@@ -45,11 +44,11 @@
   "license": "AGPL-3.0",
   "repository": {
     "type": "git",
-    "url": "https://github.com/Swarm-Code/ceregrep-client.git"
+    "url": "https://github.com/Swarm-Code/scout.git"
   },
-  "homepage": "https://github.com/Swarm-Code/ceregrep-client#readme",
+  "homepage": "https://github.com/Swarm-Code/scout#readme",
   "bugs": {
-    "url": "https://github.com/Swarm-Code/ceregrep-client/issues"
+    "url": "https://github.com/Swarm-Code/scout/issues"
   },
   "files": [
     "dist",
