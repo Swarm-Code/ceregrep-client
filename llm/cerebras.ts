@@ -356,10 +356,10 @@ export async function queryCerebras(
     temperature: options.temperature ?? 0.7,
     top_p: options.top_p ?? 0.8,
     // Don't set max_tokens - let Cerebras use its default
-    // Add tools with deep clone and tool_choice if tools exist
+    // Add tools with tool_choice if tools exist
     ...(apiTools.length > 0
       ? {
-          // CRITICAL: Deep clone tools array to prevent mutation issues (llxprt pattern)
+          // Deep clone tools array to prevent mutation issues (llxprt pattern)
           tools: JSON.parse(JSON.stringify(apiTools)),
           // CRITICAL: Add tool_choice for Qwen/Cerebras to prevent tool hallucination
           tool_choice: 'auto',

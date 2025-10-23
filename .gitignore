@@ -21,6 +21,15 @@ swarm-client/
 debug-*.log
 *.debug.log
 
+# Test files and scripts
+test-*.ts
+test-*.sh
+test-*.js
+
+# External repositories cloned for reference
+llxprt-code/
+llxprt*/
+
 # Python
 __pycache__/
 *.py[cod]
