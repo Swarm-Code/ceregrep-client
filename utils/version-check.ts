@@ -11,6 +11,8 @@ interface VersionInfo {
   latest: string;
   isOutdated: boolean;
   changesSummary?: string;
+  isDeprecated?: boolean;
+  packageName?: string;
 }
 
 const VERSION_CACHE_FILE = path.join(process.env.HOME || '/tmp', '.ceregrep-version-cache');
@@ -43,9 +45,9 @@ function compareVersions(v1: string, v2: string): number {
 }
 
 /**
- * Get local ceregrep version from package.json
+ * Get local package info (version and name) from package.json
  */
-export function getLocalVersion(): string {
+export function getLocalPackageInfo(): { version: string; name: string } {
   try {
     // Try multiple locations to find package.json
     const possiblePaths = [
@@ -53,7 +55,9 @@ export function getLocalVersion(): string {
       path.join(process.cwd(), 'package.json'),
       path.dirname(new URL(import.meta.url).pathname).replace(/dist\/utils$/, 'package.json'),
       path.join(process.env.HOME || '/tmp', '.local', 'lib', 'node_modules', 'ceregrep', 'package.json'),
+      path.join(process.env.HOME || '/tmp', '.local', 'lib', 'node_modules', 'swarm-scout', 'package.json'),
       '/usr/local/lib/node_modules/ceregrep/package.json',
+      '/usr/local/lib/node_modules/swarm-scout/package.json',
       path.join(process.cwd(), '..', 'package.json'),
     ];
 
@@ -61,15 +65,22 @@ export function getLocalVersion(): string {
       if (fs.existsSync(filePath)) {
         const pkg = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
         if (pkg.version) {
-          return pkg.version;
+          return { version: pkg.version, name: pkg.name || 'unknown' };
         }
       }
     }
 
-    return 'unknown';
+    return { version: 'unknown', name: 'unknown' };
   } catch (error) {
-    return 'unknown';
+    return { version: 'unknown', name: 'unknown' };
   }
+}
+
+/**
+ * Get local ceregrep version from package.json (legacy function)
+ */
+export function getLocalVersion(): string {
+  return getLocalPackageInfo().version;
 }
 
 /**
@@ -130,14 +141,19 @@ export async function getRemoteVersion(): Promise<string> {
  * Check if current version is outdated
  */
 export async function checkForUpdates(): Promise<VersionInfo> {
-  const current = getLocalVersion();
+  const { version: current, name: packageName } = getLocalPackageInfo();
   const latest = await getRemoteVersion();
+
+  // Check if using deprecated 'ceregrep' package name
+  const isDeprecated = packageName === 'ceregrep';
 
   if (current === 'unknown' || latest === 'unknown') {
     return {
       current,
       latest,
       isOutdated: false,
+      isDeprecated,
+      packageName,
     };
   }
 
@@ -148,6 +164,8 @@ export async function checkForUpdates(): Promise<VersionInfo> {
     latest,
     isOutdated,
     changesSummary: getChangesSummary(current, latest),
+    isDeprecated,
+    packageName,
   };
 }
 
@@ -178,13 +196,43 @@ function getChangesSummary(current: string, latest: string): string {
  * Format update notification
  */
 export function formatUpdateNotification(versionInfo: VersionInfo): string {
+  // Show deprecation notice for old 'ceregrep' package
+  if (versionInfo.isDeprecated) {
+    const lines = [
+      '\n╔════════════════════════════════════════════════════════════╗',
+      '║       ⚠️  PACKAGE MOVED - ACTION REQUIRED ⚠️                ║',
+      '╠════════════════════════════════════════════════════════════╣',
+      '║  The "ceregrep" package has been renamed to "swarm-scout" ║',
+      '║                                                            ║',
+      '║  This package is no longer maintained.                    ║',
+      '║  Please migrate to the new package for updates & support. ║',
+      '╠════════════════════════════════════════════════════════════╣',
+      '║  📦 Migration Steps:                                       ║',
+      '║                                                            ║',
+      '║  1. Uninstall old package:                                ║',
+      '║     npm uninstall -g ceregrep                             ║',
+      '║                                                            ║',
+      '║  2. Install new package:                                  ║',
+      '║     npm install -g swarm-scout                            ║',
+      '║                                                            ║',
+      '║  3. Use new command:                                      ║',
+      '║     scout [command]    (was: ceregrep [command])          ║',
+      '╠════════════════════════════════════════════════════════════╣',
+      '║  💡 All functionality remains the same!                    ║',
+      '║     Your configs (.ceregrep.json) will still work.        ║',
+      '╚════════════════════════════════════════════════════════════╝\n',
+    ];
+    return lines.join('\n');
+  }
+
+  // Regular update notification for swarm-scout
   if (!versionInfo.isOutdated) {
     return '';
   }
 
   const lines = [
     '\n╔════════════════════════════════════════════════════════════╗',
-    '║          🎉 New version of ceregrep available! 🎉          ║',
+    '║          🎉 New version of swarm-scout available! 🎉       ║',
     '╠════════════════════════════════════════════════════════════╣',
     `║  Current: ${versionInfo.current.padEnd(50)} ║`,
     `║  Latest:  ${versionInfo.latest.padEnd(50)} ║`,
@@ -196,8 +244,8 @@ export function formatUpdateNotification(versionInfo: VersionInfo): string {
   }
 
   lines.push('╠════════════════════════════════════════════════════════════╣');
-  lines.push('║  Run: ceregrep update                                      ║');
-  lines.push('║  Or:  npm install -g ceregrep@latest                      ║');
+  lines.push('║  Run: scout update                                         ║');
+  lines.push('║  Or:  npm install -g swarm-scout@latest                   ║');
   lines.push('╚════════════════════════════════════════════════════════════╝\n');
 
   return lines.join('\n');

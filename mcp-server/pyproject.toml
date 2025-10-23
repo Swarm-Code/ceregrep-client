@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "scout-mcp"
-version = "0.2.3"
+version = "0.2.4"
 description = "MCP server for Scout - exposes Scout query capabilities to other agents"
 readme = "README.md"
 requires-python = ">=3.10"
