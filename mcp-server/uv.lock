@@ -36,17 +36,6 @@ wheels = [
 ]
 
 [[package]]
-name = "ceregrep-mcp"
-version = "0.2.2"
-source = { editable = "." }
-dependencies = [
-    { name = "mcp" },
-]
-
-[package.metadata]
-requires-dist = [{ name = "mcp", specifier = ">=1.0.0" }]
-
-[[package]]
 name = "certifi"
 version = "2025.10.5"
 source = { registry = "https://pypi.org/simple" }
@@ -519,6 +508,17 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/26/ca/f5a344c534214cc2d41118c0699fffbdc2c1bc7046f2a2b9609765ab9c92/rpds_py-0.27.1-pp311-pypy311_pp73-musllinux_1_2_i686.whl", hash = "sha256:df8b74962e35c9249425d90144e721eed198e6555a0e22a563d29fe4486b51f6", size = 590482, upload-time = "2025-08-27T12:16:10.137Z" },
     { url = "https://files.pythonhosted.org/packages/ce/08/4349bdd5c64d9d193c360aa9db89adeee6f6682ab8825dca0a3f535f434f/rpds_py-0.27.1-pp311-pypy311_pp73-musllinux_1_2_x86_64.whl", hash = "sha256:dc23e6820e3b40847e2f4a7726462ba0cf53089512abe9ee16318c366494c17a", size = 556523, upload-time = "2025-08-27T12:16:12.188Z" },
 ]
+
+[[package]]
+name = "scout-mcp"
+version = "0.2.3"
+source = { editable = "." }
+dependencies = [
+    { name = "mcp" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "mcp", specifier = ">=1.0.0" }]
 
 [[package]]
 name = "sniffio"
