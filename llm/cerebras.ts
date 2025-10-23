@@ -13,6 +13,49 @@ import { zodToJsonSchema } from 'zod-to-json-schema';
 const CEREBRAS_BASE_URL = 'https://api.cerebras.ai/v1';
 const CEREBRAS_COST_PER_MILLION_TOKENS = 2.0; // Both input and output
 
+// Retry configuration
+const MAX_RETRIES = 3;
+const BASE_DELAY_MS = 1000; // 1 second base delay
+const MAX_DELAY_MS = 60000; // 60 seconds max delay
+
+// Timeout configuration (in milliseconds)
+const DEFAULT_TIMEOUT_MS = 120000; // 2 minutes
+
+/**
+ * Sleep for a specified duration
+ */
+async function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * Calculate exponential backoff delay
+ */
+function calculateBackoffDelay(attempt: number): number {
+  const delay = Math.min(BASE_DELAY_MS * Math.pow(2, attempt), MAX_DELAY_MS);
+  // Add jitter (random variation of ±25%)
+  const jitter = delay * 0.25 * (Math.random() * 2 - 1);
+  return Math.floor(delay + jitter);
+}
+
+/**
+ * Check if error is retryable
+ */
+function isRetryableError(error: any): boolean {
+  // Retry on connection errors
+  if (error.code === 'ECONNRESET' || error.code === 'ETIMEDOUT' || error.code === 'ECONNREFUSED') {
+    return true;
+  }
+
+  // Retry on specific HTTP status codes
+  const status = error.status || error.response?.status;
+  if (status === 408 || status === 409 || status === 429 || (status >= 500 && status < 600)) {
+    return true;
+  }
+
+  return false;
+}
+
 /**
  * Format tools for OpenAI/Cerebras API
  */
@@ -118,6 +161,8 @@ export async function queryCerebras(
   const client = new OpenAI({
     apiKey,
     baseURL: options.baseURL || CEREBRAS_BASE_URL,
+    timeout: DEFAULT_TIMEOUT_MS,
+    maxRetries: 0, // We'll handle retries manually for better control
   });
 
   const model = options.model || 'qwen-3-coder-480b';
@@ -313,8 +358,8 @@ export async function queryCerebras(
       requestParams.tools = apiTools;
     }
 
-    // TEMP DEBUG: Save all requests for debugging
-    if (requestParams.tools && requestParams.messages.length > 2) {
+    // DEBUG: Save all requests for debugging (only when verbose/debug enabled)
+    if ((process.env.DEBUG_MCP || process.env.DEBUG_CEREBRAS) && requestParams.tools && requestParams.messages.length > 2) {
       try {
         const filename = `/tmp/cerebras-request-${requestParams.messages.length}msg.json`;
         await import('fs').then(fs =>
@@ -390,7 +435,41 @@ export async function queryCerebras(
       }
     }
 
-    const response = await client.chat.completions.create(requestParams);
+    // Execute API call with retry logic
+    let lastError: any;
+    let response: OpenAI.Chat.ChatCompletion | undefined;
+
+    for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+      try {
+        response = await client.chat.completions.create(requestParams);
+        break; // Success! Exit retry loop
+      } catch (error: any) {
+        lastError = error;
+
+        // Check if we should retry
+        if (attempt < MAX_RETRIES && isRetryableError(error)) {
+          const delay = calculateBackoffDelay(attempt);
+          const errorType = error.constructor?.name || 'Error';
+          const status = error.status || error.response?.status || 'N/A';
+
+          console.error(`\n⚠️  Cerebras API Error (attempt ${attempt + 1}/${MAX_RETRIES + 1})`);
+          console.error(`   Error Type: ${errorType}`);
+          console.error(`   Status: ${status}`);
+          console.error(`   Message: ${error.message}`);
+          console.error(`   Retrying in ${(delay / 1000).toFixed(1)}s...\n`);
+
+          await sleep(delay);
+          continue;
+        }
+
+        // Not retryable or max retries exceeded
+        throw error;
+      }
+    }
+
+    if (!response) {
+      throw lastError || new Error('Failed to get response from Cerebras API');
+    }
 
     const durationMs = Date.now() - startTime;
     const costUSD = response.usage ? calculateCost(response.usage) : 0;
@@ -489,10 +568,41 @@ export async function queryCerebras(
       } as any,
     };
   } catch (error: any) {
+    const errorType = error.constructor?.name || 'Error';
+    const status = error.status || error.response?.status;
+
     console.error('\n❌ === CEREBRAS API ERROR ===');
-    console.error('Error type:', error.constructor.name);
+    console.error('Error type:', errorType);
     console.error('Error message:', error.message);
-    console.error('Status code:', error.status);
+    console.error('Status code:', status || 'N/A');
+
+    // Provide helpful error messages based on error type
+    if (status === 400) {
+      console.error('\n💡 BadRequestError (400): The request was malformed.');
+      console.error('   Possible causes:');
+      console.error('   - Invalid model name');
+      console.error('   - Malformed message content');
+      console.error('   - Invalid tool schema');
+      console.error('   - Request exceeds size limits');
+    } else if (status === 401) {
+      console.error('\n💡 AuthenticationError (401): Invalid API key.');
+      console.error('   Please check your CEREBRAS_API_KEY.');
+    } else if (status === 403) {
+      console.error('\n💡 PermissionDeniedError (403): Access forbidden.');
+      console.error('   Your API key may not have access to this model or feature.');
+    } else if (status === 404) {
+      console.error('\n💡 NotFoundError (404): Resource not found.');
+      console.error('   The model or endpoint may not exist.');
+    } else if (status === 429) {
+      console.error('\n💡 RateLimitError (429): Rate limit exceeded.');
+      console.error('   Please wait before retrying. (Already retried 3 times)');
+    } else if (status >= 500) {
+      console.error('\n💡 InternalServerError (5xx): Cerebras API is experiencing issues.');
+      console.error('   Please try again later. (Already retried 3 times)');
+    } else if (error.code === 'ETIMEDOUT' || error.code === 'ECONNRESET') {
+      console.error('\n💡 ConnectionError: Unable to reach Cerebras API.');
+      console.error('   Check your internet connection. (Already retried 3 times)');
+    }
 
     // Try to get the actual API error response
     if (error.response) {
@@ -523,7 +633,7 @@ export async function queryCerebras(
     console.error('  Tools:', apiTools.length);
     console.error('  Temperature:', options.temperature ?? 0.7);
     console.error('  Top P:', options.top_p ?? 0.8);
-    console.error('  Max tokens:', 100000);
+    console.error('  Timeout:', DEFAULT_TIMEOUT_MS, 'ms');
 
     // Log detailed formatted messages and tools for debugging malformed requests
     if (process.env.DEBUG_MCP || process.env.DEBUG_CEREBRAS) {
