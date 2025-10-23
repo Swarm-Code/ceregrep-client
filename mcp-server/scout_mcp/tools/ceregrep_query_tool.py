@@ -1,4 +1,4 @@
-"""Ceregrep query tool for finding context in codebases."""
+"""Scout query tool for finding context in codebases."""
 
 import asyncio
 import subprocess
@@ -10,11 +10,11 @@ from typing import Dict, Any, List
 
 
 class CeregrepQueryTool(BaseTool):
-    """Tool to query ceregrep agent for codebase context and analysis."""
+    """Tool to query Scout agent for codebase context and analysis."""
 
     def __init__(self, ceregrep_bin_path: str = None):
-        """Initialize the tool with path to ceregrep binary."""
-        self.ceregrep_bin = ceregrep_bin_path or "ceregrep"
+        """Initialize the tool with path to scout binary."""
+        self.ceregrep_bin = ceregrep_bin_path or "scout"
 
     @property
     def name(self) -> str:
@@ -23,8 +23,8 @@ class CeregrepQueryTool(BaseTool):
     @property
     def description(self) -> str:
         return (
-            "Query the ceregrep agent to find context in a codebase. "
-            "Ceregrep uses LLM-powered analysis with bash and grep tools to explore code, "
+            "Query the Scout agent to find context in a codebase. "
+            "Scout uses LLM-powered analysis with bash and grep tools to explore code, "
             "find patterns, analyze architecture, and provide detailed context. "
             "Use this when you need to understand code structure, find implementations, "
             "or gather context from files."
@@ -37,11 +37,11 @@ class CeregrepQueryTool(BaseTool):
             "properties": {
                 "query": {
                     "type": "string",
-                    "description": "Natural language query to ask ceregrep (e.g., 'Find all async functions', 'Explain the auth flow')"
+                    "description": "Natural language query to ask Scout (e.g., 'Find all async functions', 'Explain the auth flow')"
                 },
                 "cwd": {
                     "type": "string",
-                    "description": "Working directory to run ceregrep in (optional, defaults to current directory)"
+                    "description": "Working directory to run Scout in (optional, defaults to current directory)"
                 },
                 "model": {
                     "type": "string",
@@ -56,7 +56,7 @@ class CeregrepQueryTool(BaseTool):
         }
 
     async def execute(self, arguments: Dict[str, Any]) -> List[TextContent]:
-        """Execute ceregrep query."""
+        """Execute Scout query."""
         query = arguments.get("query", "")
         cwd = arguments.get("cwd", ".")
         model = arguments.get("model")
@@ -89,7 +89,7 @@ class CeregrepQueryTool(BaseTool):
                 error_msg = stderr.decode() if stderr else "Unknown error"
                 return [TextContent(
                     type="text",
-                    text=f"Ceregrep query failed: {error_msg}"
+                    text=f"Scout query failed: {error_msg}"
                 )]
 
             # Parse output
@@ -97,20 +97,19 @@ class CeregrepQueryTool(BaseTool):
 
             return [TextContent(
                 type="text",
-                text=f"## Ceregrep Query Result\n\n**Query:** {query}\n\n{output}"
+                text=f"## Scout Query Result\n\n**Query:** {query}\n\n{output}"
             )]
 
         except FileNotFoundError:
             return [TextContent(
                 type="text",
                 text=(
-                    "Error: ceregrep command not found. "
-                    "Make sure ceregrep is installed and in PATH. "
-                    "Run: npm link in the ceregrep-client directory to install globally."
+                    "Error: scout command not found. "
+                    "Make sure Scout is installed: npm install -g swarm-scout"
                 )
             )]
         except Exception as e:
             return [TextContent(
                 type="text",
-                text=f"Error executing ceregrep: {str(e)}"
+                text=f"Error executing Scout: {str(e)}"
             )]

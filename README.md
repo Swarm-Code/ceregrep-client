@@ -70,21 +70,23 @@ console.log('Agent response:', result.messages);
 
 ```bash
 # Query the agent
-ceregrep query "List all TypeScript files"
+scout query "List all TypeScript files"
 
 # List available tools
-ceregrep list-tools
+scout list-tools
 
 # Show configuration
-ceregrep config
+scout config
 ```
 
 ## Configuration
 
-Ceregrep supports both global and project-specific configuration:
+Swarm Scout supports both global and project-specific configuration:
 
-- **Global config**: `~/.ceregrep.json` or `~/.swarmrc` (applies to all projects)
-- **Project config**: `.ceregrep.json` or `.swarmrc` in project directory (overrides global)
+- **Global config**: `~/.swarmrc` (applies to all projects)
+- **Project config**: `.swarmrc` in project directory (overrides global)
+
+**Note:** `.ceregrep.json` is still supported for backward compatibility but deprecated. The tool will show a warning and you should migrate to `.swarmrc`.
 
 Create a global config for system-wide defaults, or project configs to override settings per-project.
 
@@ -111,7 +113,7 @@ Create a global config for system-wide defaults, or project configs to override 
 **Global config** (recommended for Cerebras):
 
 ```bash
-cat > ~/.ceregrep.json << 'EOF'
+cat > ~/.swarmrc << 'EOF'
 {
   "model": "qwen-3-coder-480b",
   "provider": {
@@ -165,7 +167,7 @@ export CEREBRAS_API_KEY=your-key-here
 
 ### MCP Tools
 
-Connect to any MCP server to extend functionality. Configure servers in `.ceregrep.json`:
+Connect to any MCP server to extend functionality. Configure servers in `.swarmrc`:
 
 ```json
 {
@@ -181,10 +183,10 @@ Connect to any MCP server to extend functionality. Configure servers in `.ceregr
 
 ## API Reference
 
-### CeregrepClient
+### SwarmScoutClient
 
 ```typescript
-class CeregrepClient {
+class SwarmScoutClient {
   constructor(options?: QueryOptions);
 
   // Query the agent
@@ -235,11 +237,11 @@ The framework consists of several modular components:
 
 ## MCP Server
 
-Ceregrep can also be exposed as an **MCP server**, allowing other agents to use it as a tool for querying and analyzing codebases. **Now available on PyPI!**
+Swarm Scout can also be exposed as an **MCP server**, allowing other agents to use it as a tool for querying and analyzing codebases. **Now available on PyPI!**
 
 ### What is the MCP Server?
 
-The MCP server (`mcp-server/`) turns ceregrep into a context-finding tool that other agents can call. Instead of manually using bash and grep, agents can ask ceregrep (which has its own LLM-powered analysis) to find context.
+The MCP server (`mcp-server/`) turns Swarm Scout into a context-finding tool that other agents can call. Instead of manually using bash and grep, agents can ask Scout (which has its own LLM-powered analysis) to find context.
 
 This creates a **recursive agent** pattern where agents can delegate complex context-finding to specialized sub-agents.
 
@@ -247,14 +249,14 @@ This creates a **recursive agent** pattern where agents can delegate complex con
 
 **Prerequisites:**
 ```bash
-# Install ceregrep CLI first
-npm install -g ceregrep
+# Install Scout CLI first
+npm install -g swarm-scout
 ```
 
 **Option 1: Using Claude MCP CLI (Easiest)**
 
 ```bash
-claude mcp add ceregrep uvx ceregrep-mcp
+claude mcp add scout uvx scout-mcp
 ```
 
 **Option 2: Using uvx (No Installation Required)**
@@ -264,9 +266,9 @@ Add to your Claude Desktop config (`~/Library/Application Support/Claude/claude_
 ```json
 {
   "mcpServers": {
-    "ceregrep": {
+    "scout": {
       "command": "uvx",
-      "args": ["ceregrep-mcp"]
+      "args": ["scout-mcp"]
     }
   }
 }
@@ -275,13 +277,13 @@ Add to your Claude Desktop config (`~/Library/Application Support/Claude/claude_
 **Option 3: Install via pip**
 
 ```bash
-pip install ceregrep-mcp
+pip install scout-mcp
 
 # Then add to Claude Desktop:
 {
   "mcpServers": {
-    "ceregrep": {
-      "command": "ceregrep-mcp"
+    "scout": {
+      "command": "scout-mcp"
     }
   }
 }
@@ -289,7 +291,7 @@ pip install ceregrep-mcp
 
 ### Available MCP Tools
 
-- **ceregrep_query**: Query ceregrep to find context in codebases
+- **ceregrep_query**: Query Scout to find context in codebases
   - Parameters: `query` (required), `cwd`, `model`, `verbose`
   - Example queries:
     - "Find all async functions in this codebase"

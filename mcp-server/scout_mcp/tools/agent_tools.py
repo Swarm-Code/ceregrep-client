@@ -1,4 +1,4 @@
-"""Dynamically expose ceregrep agents as MCP tools."""
+"""Dynamically expose Scout agents as MCP tools."""
 
 import asyncio
 import subprocess
@@ -11,14 +11,14 @@ from typing import Dict, Any, List, Optional
 
 
 class AgentToolGenerator:
-    """Generates MCP tools for each ceregrep agent."""
+    """Generates MCP tools for each Scout agent."""
 
     # Cache TTL in seconds (5 minutes)
     CACHE_TTL = 300
 
     def __init__(self, ceregrep_bin_path: str = None):
-        """Initialize with path to ceregrep binary."""
-        self.ceregrep_bin = ceregrep_bin_path or "ceregrep"
+        """Initialize with path to scout binary."""
+        self.ceregrep_bin = ceregrep_bin_path or "scout"
         self._agent_cache: Optional[List[Dict[str, str]]] = None
         self._cache_timestamp: Optional[float] = None
 
