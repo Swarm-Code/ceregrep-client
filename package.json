@@ -1,6 +1,6 @@
 {
   "name": "swarm-scout",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "Headless agent framework with Bash, Ripgrep, and MCP support - invocable via TypeScript SDK, Python SDK, and CLI",
   "type": "module",
   "main": "./dist/index.js",
