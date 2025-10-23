@@ -1,6 +1,6 @@
 {
   "name": "swarm-scout",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Headless agent framework with Bash, Ripgrep, and MCP support - invocable via TypeScript SDK, Python SDK, and CLI",
   "type": "module",
   "main": "./dist/index.js",
@@ -23,7 +23,8 @@
     "copy-templates": "mkdir -p dist/agents/templates && cp -r agents/templates/*.json dist/agents/templates/",
     "dev": "tsc --watch",
     "clean": "rm -rf dist",
-    "prepublishOnly": "npm run clean && npm run build"
+    "prepublishOnly": "npm run clean && npm run build",
+    "postinstall": "node scripts/postinstall.cjs"
   },
   "keywords": [
     "agent",
