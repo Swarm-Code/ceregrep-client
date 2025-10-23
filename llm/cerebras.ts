@@ -335,20 +335,23 @@ export async function queryCerebras(
   const timestamp = Date.now();
 
   // Build request params (outside try block so we can log it on error)
+  // CRITICAL: Following llxprt-code pattern for Cerebras/Qwen compatibility
+  // Reference: https://github.com/vybestack/llxprt-code OpenAIProvider.ts:742-755
   const requestParams: any = {
     model,
     messages: apiMessages,
     temperature: options.temperature ?? 0.7,
     top_p: options.top_p ?? 0.8,
     // Don't set max_tokens - let Cerebras use its default
-  };
-
-  // Add tools if there are any
-  // CRITICAL: Add tool_choice: 'auto' for Cerebras to prevent tool hallucination errors
-  // See: https://github.com/vybestack/llxprt-code (OpenAIProvider.ts:750)
-  if (apiTools.length > 0) {
-    requestParams.tools = apiTools;
-    requestParams.tool_choice = 'auto';
+    // Add tools with deep clone and tool_choice if tools exist
+    ...(apiTools.length > 0
+      ? {
+          // CRITICAL: Deep clone tools array to prevent mutation issues (llxprt pattern)
+          tools: JSON.parse(JSON.stringify(apiTools)),
+          // CRITICAL: Add tool_choice for Qwen/Cerebras to prevent tool hallucination
+          tool_choice: 'auto',
+        }
+      : {}),
   }
 
   try {
