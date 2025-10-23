@@ -18,8 +18,13 @@ const MAX_RETRIES = 3;
 const BASE_DELAY_MS = 1000; // 1 second base delay
 const MAX_DELAY_MS = 60000; // 60 seconds max delay
 
-// Timeout configuration (in milliseconds)
-const DEFAULT_TIMEOUT_MS = 30000; // 30 seconds
+// Progressive timeout configuration (in milliseconds)
+const TIMEOUT_MS_BY_ATTEMPT = [
+  15000,  // 15 seconds for first attempt
+  30000,  // 30 seconds for first retry
+  60000,  // 60 seconds for second retry
+  120000  // 2 minutes for final retry
+];
 
 /**
  * Sleep for a specified duration
@@ -157,13 +162,6 @@ export async function queryCerebras(
   if (!apiKey) {
     throw new Error('CEREBRAS_API_KEY is not set. Please set it in your config or environment.');
   }
-
-  const client = new OpenAI({
-    apiKey,
-    baseURL: options.baseURL || CEREBRAS_BASE_URL,
-    timeout: DEFAULT_TIMEOUT_MS,
-    maxRetries: 0, // We'll handle retries manually for better control
-  });
 
   const model = options.model || 'qwen-3-coder-480b';
 
@@ -309,24 +307,15 @@ export async function queryCerebras(
         .join('\n');
 
       if (toolCalls.length > 0) {
-        // When there are tool calls, Cerebras/OpenAI have specific requirements:
-        // - Whitespace-only content causes 400 errors
-        // - Empty string may cause issues with Cerebras (not OpenAI)
-        // - Best practice: omit content field entirely if no meaningful text
+        // When there are tool calls, follow llxprt approach:
+        // Use null for content when there's no text (not omitted, not empty string)
         const trimmedContent = textContent.trim();
 
-        const message: any = {
+        apiMessages.push({
           role: 'assistant',
+          content: trimmedContent || null,
           tool_calls: toolCalls,
-        };
-
-        // Only include content if there's actual text
-        if (trimmedContent) {
-          message.content = trimmedContent;
-        }
-        // Otherwise omit the field entirely (don't set to null or empty string)
-
-        apiMessages.push(message);
+        });
       } else {
         apiMessages.push({
           role: 'assistant',
@@ -343,32 +332,35 @@ export async function queryCerebras(
   const apiTools = formatToolsForOpenAI(tools);
 
   const startTime = Date.now();
+  const timestamp = Date.now();
+
+  // Build request params (outside try block so we can log it on error)
+  const requestParams: any = {
+    model,
+    messages: apiMessages,
+    temperature: options.temperature ?? 0.7,
+    top_p: options.top_p ?? 0.8,
+    // Don't set max_tokens - let Cerebras use its default
+  };
+
+  // Add tools if there are any
+  // CRITICAL: Add tool_choice: 'auto' for Cerebras to prevent tool hallucination errors
+  // See: https://github.com/vybestack/llxprt-code (OpenAIProvider.ts:750)
+  if (apiTools.length > 0) {
+    requestParams.tools = apiTools;
+    requestParams.tool_choice = 'auto';
+  }
 
   try {
-    const requestParams: any = {
-      model,
-      messages: apiMessages,
-      temperature: options.temperature ?? 0.7,
-      top_p: options.top_p ?? 0.8,
-      // Don't set max_tokens - let Cerebras use its default
-    };
-
-    // Add tools if there are any
-    if (apiTools.length > 0) {
-      requestParams.tools = apiTools;
-    }
-
-    // DEBUG: Save all requests for debugging (only when verbose/debug enabled)
-    if ((process.env.DEBUG_MCP || process.env.DEBUG_CEREBRAS) && requestParams.tools && requestParams.messages.length > 2) {
-      try {
-        const filename = `/tmp/cerebras-request-${requestParams.messages.length}msg.json`;
-        await import('fs').then(fs =>
-          fs.promises.writeFile(filename, JSON.stringify(requestParams, null, 2))
-        );
-        console.error(`🔍 Saved ${requestParams.messages.length}-message request to ${filename}`);
-      } catch (e) {
-        // Ignore
-      }
+    // ALWAYS save requests for debugging - we need to see what's failing
+    const filename = `/tmp/cerebras-request-${timestamp}-${requestParams.messages.length}msg.json`;
+    try {
+      await import('fs').then(fs =>
+        fs.promises.writeFile(filename, JSON.stringify(requestParams, null, 2))
+      );
+      console.error(`🔍 [${new Date().toISOString()}] Saved ${requestParams.messages.length}-message request to ${filename}`);
+    } catch (e) {
+      console.error(`Failed to save request: ${e}`);
     }
 
     // Debug: Log full request payload to catch null values
@@ -435,12 +427,21 @@ export async function queryCerebras(
       }
     }
 
-    // Execute API call with retry logic
+    // Execute API call with retry logic and progressive timeouts
     let lastError: any;
     let response: OpenAI.Chat.ChatCompletion | undefined;
 
     for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
       try {
+        // Create client with progressive timeout for this attempt
+        const timeoutForAttempt = TIMEOUT_MS_BY_ATTEMPT[attempt] || TIMEOUT_MS_BY_ATTEMPT[TIMEOUT_MS_BY_ATTEMPT.length - 1];
+        const client = new OpenAI({
+          apiKey,
+          baseURL: options.baseURL || CEREBRAS_BASE_URL,
+          timeout: timeoutForAttempt,
+          maxRetries: 0, // We handle retries manually
+        });
+
         response = await client.chat.completions.create(requestParams);
         break; // Success! Exit retry loop
       } catch (error: any) {
@@ -451,12 +452,13 @@ export async function queryCerebras(
           const delay = calculateBackoffDelay(attempt);
           const errorType = error.constructor?.name || 'Error';
           const status = error.status || error.response?.status || 'N/A';
+          const nextTimeout = TIMEOUT_MS_BY_ATTEMPT[attempt + 1] || TIMEOUT_MS_BY_ATTEMPT[TIMEOUT_MS_BY_ATTEMPT.length - 1];
 
           console.error(`\n⚠️  Cerebras API Error (attempt ${attempt + 1}/${MAX_RETRIES + 1})`);
           console.error(`   Error Type: ${errorType}`);
           console.error(`   Status: ${status}`);
           console.error(`   Message: ${error.message}`);
-          console.error(`   Retrying in ${(delay / 1000).toFixed(1)}s...\n`);
+          console.error(`   Retrying in ${(delay / 1000).toFixed(1)}s with ${(nextTimeout / 1000)}s timeout...\n`);
 
           await sleep(delay);
           continue;
@@ -469,6 +471,17 @@ export async function queryCerebras(
 
     if (!response) {
       throw lastError || new Error('Failed to get response from Cerebras API');
+    }
+
+    // ALWAYS save successful responses
+    try {
+      const responseFilename = `/tmp/cerebras-response-${timestamp}-${requestParams.messages.length}msg.json`;
+      await import('fs').then(fs =>
+        fs.promises.writeFile(responseFilename, JSON.stringify(response, null, 2))
+      );
+      console.error(`✅ [${new Date().toISOString()}] Saved response to ${responseFilename}`);
+    } catch (e) {
+      console.error(`Failed to save response: ${e}`);
     }
 
     const durationMs = Date.now() - startTime;
@@ -571,6 +584,26 @@ export async function queryCerebras(
     const errorType = error.constructor?.name || 'Error';
     const status = error.status || error.response?.status;
 
+    // ALWAYS save failed requests for debugging
+    try {
+      const errorFilename = `/tmp/cerebras-error-${timestamp}-${apiMessages.length}msg.json`;
+      await import('fs').then(fs =>
+        fs.promises.writeFile(errorFilename, JSON.stringify({
+          error: {
+            type: errorType,
+            message: error.message,
+            status,
+            stack: error.stack,
+            response: error.response,
+          },
+          request: requestParams,
+        }, null, 2))
+      );
+      console.error(`❌ [${new Date().toISOString()}] Saved error and request to ${errorFilename}`);
+    } catch (e) {
+      console.error(`Failed to save error: ${e}`);
+    }
+
     console.error('\n❌ === CEREBRAS API ERROR ===');
     console.error('Error type:', errorType);
     console.error('Error message:', error.message);
@@ -633,7 +666,7 @@ export async function queryCerebras(
     console.error('  Tools:', apiTools.length);
     console.error('  Temperature:', options.temperature ?? 0.7);
     console.error('  Top P:', options.top_p ?? 0.8);
-    console.error('  Timeout:', DEFAULT_TIMEOUT_MS, 'ms');
+    console.error('  Timeouts:', TIMEOUT_MS_BY_ATTEMPT.map(t => `${t/1000}s`).join(' → '));
 
     // Log detailed formatted messages and tools for debugging malformed requests
     if (process.env.DEBUG_MCP || process.env.DEBUG_CEREBRAS) {
