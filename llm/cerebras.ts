@@ -19,7 +19,7 @@ const BASE_DELAY_MS = 1000; // 1 second base delay
 const MAX_DELAY_MS = 60000; // 60 seconds max delay
 
 // Timeout configuration (in milliseconds)
-const DEFAULT_TIMEOUT_MS = 120000; // 2 minutes
+const DEFAULT_TIMEOUT_MS = 30000; // 30 seconds
 
 /**
  * Sleep for a specified duration
