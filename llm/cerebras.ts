@@ -26,6 +26,10 @@ const TIMEOUT_MS_BY_ATTEMPT = [
   120000  // 2 minutes for final retry
 ];
 
+// Rate limiting - add delay between requests to prevent overwhelming Cerebras API
+const REQUEST_DELAY_MS = 200; // 200ms delay between requests
+let lastRequestTime = 0;
+
 /**
  * Sleep for a specified duration
  */
@@ -158,6 +162,15 @@ export async function queryCerebras(
     top_p?: number;
   },
 ): Promise<AssistantMessage> {
+  // Rate limiting: ensure minimum delay between requests
+  const now = Date.now();
+  const timeSinceLastRequest = now - lastRequestTime;
+  if (timeSinceLastRequest < REQUEST_DELAY_MS) {
+    const delayNeeded = REQUEST_DELAY_MS - timeSinceLastRequest;
+    await sleep(delayNeeded);
+  }
+  lastRequestTime = Date.now();
+
   const apiKey = options.apiKey || process.env.CEREBRAS_API_KEY;
   if (!apiKey) {
     throw new Error('CEREBRAS_API_KEY is not set. Please set it in your config or environment.');
