@@ -1,26 +1,26 @@
-# Ceregrep MCP Server
+# Scout MCP Server
 
-[![pypi version](https://img.shields.io/pypi/v/ceregrep-mcp.svg)](https://pypi.org/project/ceregrep-mcp/)
-[![license](https://img.shields.io/pypi/l/ceregrep-mcp.svg)](https://github.com/Swarm-Code/ceregrep-client/blob/master/LICENSE)
+[![pypi version](https://img.shields.io/pypi/v/scout-mcp.svg)](https://pypi.org/project/scout-mcp/)
+[![license](https://img.shields.io/pypi/l/scout-mcp.svg)](https://github.com/Swarm-Code/scout/blob/master/LICENSE)
 
-MCP (Model Context Protocol) server that exposes ceregrep query capabilities to other agents.
+MCP (Model Context Protocol) server that exposes Swarm Scout query capabilities to other agents.
 
 ## What is This?
 
-This MCP server allows any MCP-compatible agent (like Claude Desktop) to use ceregrep as a tool for querying and analyzing codebases. Instead of the agent manually using bash and grep, it can ask ceregrep (which has its own LLM-powered analysis) to find context.
+This MCP server allows any MCP-compatible agent (like Claude Desktop) to use Swarm Scout as a tool for querying and analyzing codebases. Instead of the agent manually using bash and grep, it can ask Scout (which has its own LLM-powered analysis) to find context.
 
 ## Features
 
-- **ceregrep_query**: Query ceregrep to find context in codebases
+- **ceregrep_query**: Query Scout to find context in codebases
   - Natural language queries (e.g., "Find all async functions", "Explain the auth flow")
   - Automatic code exploration using ceregrep's bash + grep tools
   - LLM-powered analysis and context gathering
 
 ## Prerequisites
 
-1. **Ceregrep CLI installed globally**:
+1. **Swarm Scout CLI installed globally**:
    ```bash
-   npm install -g ceregrep
+   npm install -g swarm-scout
    ```
 
 2. **Python ≥ 3.10** (for pip installation) or **uvx** (for no-install usage)
@@ -31,13 +31,13 @@ This MCP server allows any MCP-compatible agent (like Claude Desktop) to use cer
 
 ```bash
 # No installation needed! Just use uvx to run it
-uvx ceregrep-mcp
+uvx scout-mcp
 ```
 
 ### Option 2: Install via pip
 
 ```bash
-pip install ceregrep-mcp
+pip install scout-mcp
 ```
 
 ### Option 3: Install from source (Development)
@@ -51,10 +51,10 @@ pip install -e .
 
 ### Using with uvx (Recommended)
 
-The easiest way to use ceregrep-mcp is with `uvx`, which runs the package without installation:
+The easiest way to use scout-mcp is with `uvx`, which runs the package without installation:
 
 ```bash
-uvx ceregrep-mcp
+uvx scout-mcp
 ```
 
 ### Add to Claude Desktop
@@ -62,10 +62,10 @@ uvx ceregrep-mcp
 **Method 1: Using Claude MCP CLI (Easiest)**
 
 ```bash
-claude mcp add ceregrep uvx ceregrep-mcp
+claude mcp add scout uvx scout-mcp
 ```
 
-This automatically adds ceregrep-mcp to your Claude configuration.
+This automatically adds scout-mcp to your Claude configuration.
 
 **Method 2: Manual Configuration**
 
@@ -79,9 +79,9 @@ Add this configuration:
 ```json
 {
   "mcpServers": {
-    "ceregrep": {
+    "scout": {
       "command": "uvx",
-      "args": ["ceregrep-mcp"]
+      "args": ["scout-mcp"]
     }
   }
 }
@@ -92,8 +92,8 @@ Add this configuration:
 ```json
 {
   "mcpServers": {
-    "ceregrep": {
-      "command": "ceregrep-mcp"
+    "scout": {
+      "command": "scout-mcp"
     }
   }
 }
@@ -115,23 +115,23 @@ For any MCP-compatible client, add to your `mcp.json` or equivalent config file:
 }
 ```
 
-### Add to Ceregrep Itself (Recursive Pattern)
+### Add to Scout Itself (Recursive Pattern)
 
-You can even use ceregrep's own MCP client to connect to this server! Add to `.ceregrep.json` or `~/.ceregrep.json`:
+You can even use Scout's own MCP client to connect to this server! Add to `.swarmrc`:
 
 ```json
 {
   "mcpServers": {
-    "ceregrep-context": {
+    "scout-context": {
       "type": "stdio",
       "command": "uvx",
-      "args": ["ceregrep-mcp"]
+      "args": ["scout-mcp"]
     }
   }
 }
 ```
 
-Now ceregrep can delegate context-finding to another instance of itself!
+Now Scout can delegate context-finding to another instance of itself!
 
 ## Available Tools
 
@@ -240,17 +240,18 @@ I've analyzed your authentication system. Here's what I found:
 ## How It Works
 
 1. Agent sends a natural language query to ceregrep_query tool
-2. MCP server invokes the ceregrep CLI with the query
-3. Ceregrep uses its own LLM + bash + grep tools to explore the codebase
+2. MCP server invokes the Scout CLI with the query
+3. Scout uses its own LLM + bash + grep tools to explore the codebase
 4. Results are returned to the requesting agent
 
 This creates a **recursive agent** pattern where agents can delegate complex context-finding to specialized sub-agents.
 
 ## Configuration
 
-The MCP server uses the ceregrep CLI, which reads configuration from:
-- `.ceregrep.json` in the working directory
-- `~/.config/ceregrep/config.json` (global config)
+The MCP server uses the Scout CLI, which reads configuration from:
+- `.swarmrc` in the working directory (recommended)
+- `.ceregrep.json` in the working directory (deprecated but supported)
+- `~/.swarmrc` (global config)
 - Environment variables (`ANTHROPIC_API_KEY`, `CEREBRAS_API_KEY`)
 
 ## Development
@@ -277,21 +278,24 @@ mcp-server/
 
 ## Agent Discovery and Caching
 
-The MCP server automatically discovers agents by running `ceregrep agent list --json`. To optimize performance:
+The MCP server automatically discovers agents by running `scout agent list --json`. To optimize performance:
 
 - **Agent list is cached for 5 minutes** - New agents will be visible within 5 minutes without restarting the MCP server
 - **Cache refreshes automatically** - After 5 minutes, the agent list is refreshed on the next tool list request
 - **Manual refresh** - Restart the MCP server to immediately refresh the agent list
 
 This means you can:
-1. Create a new agent with `ceregrep agent init` or `ceregrep agent import`
+1. Create a new agent with `scout agent init` or `scout agent import`
 2. Use it in Claude Code within 5 minutes (or restart the MCP server for immediate availability)
 
 ## Troubleshooting
 
-### "ceregrep command not found"
+### "scout command not found"
 
-Run `npm link` in the ceregrep-client directory to install the CLI globally.
+Install the Scout CLI globally:
+```bash
+npm install -g swarm-scout
+```
 
 ### MCP connection errors
 
@@ -303,9 +307,9 @@ uv --version      # Should be installed
 
 ### Query failures
 
-Check ceregrep configuration:
+Check Scout configuration:
 ```bash
-ceregrep config  # View current config
+scout config  # View current config
 ```
 
 Ensure API keys are set:
