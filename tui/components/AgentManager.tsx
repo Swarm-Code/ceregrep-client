@@ -20,6 +20,8 @@ import { Modal } from './common/Modal.js';
 import { getMCPTools } from '../../mcp/client.js';
 
 interface AgentManagerProps {
+  currentAgentId?: string | undefined;
+  onSwitchAgent?: (agentId: string | undefined) => void;
   onCancel: () => void;
   onAgentChange?: () => void;
 }
@@ -49,7 +51,7 @@ interface ModalState {
   onConfirm?: () => void;
 }
 
-export const AgentManager: React.FC<AgentManagerProps> = ({ onCancel, onAgentChange }) => {
+export const AgentManager: React.FC<AgentManagerProps> = ({ currentAgentId, onSwitchAgent, onCancel, onAgentChange }) => {
   const [view, setView] = useState<View>('list');
   const [globalAgents, setGlobalAgents] = useState<AgentConfig[]>([]);
   const [projectAgents, setProjectAgents] = useState<AgentConfig[]>([]);
@@ -170,11 +172,24 @@ export const AgentManager: React.FC<AgentManagerProps> = ({ onCancel, onAgentCha
       return;
     }
 
-    // Determine scope
-    const isGlobal = globalAgents.some(a => a.id === item.id);
-    setSelectedAgentId(item.id);
-    setSelectedScope(isGlobal ? 'global' : 'project');
-    setView('edit');
+    // Check if this is the currently active agent
+    const isActive = item.id === currentAgentId;
+
+    if (isActive) {
+      // Active agent: go to edit view
+      const isGlobal = globalAgents.some(a => a.id === item.id);
+      setSelectedAgentId(item.id);
+      setSelectedScope(isGlobal ? 'global' : 'project');
+      setView('edit');
+    } else {
+      // Inactive agent: switch to it
+      if (onSwitchAgent) {
+        onSwitchAgent(item.id);
+        setMessage(`Switched to agent: ${item.label}`);
+        setTimeout(() => setMessage(null), 2000);
+        // Stay in list view to show new active state
+      }
+    }
   };
 
   const deleteAgentHandler = async (agentId: string) => {
@@ -294,23 +309,27 @@ export const AgentManager: React.FC<AgentManagerProps> = ({ onCancel, onAgentCha
 
     // Add global agents
     globalAgents.forEach((agent) => {
+      const isActive = agent.id === currentAgentId;
       items.push({
         id: agent.id,
         label: agent.name,
         description: agent.description,
-        badge: 'GLOBAL',
-        status: 'active',
+        badge: isActive ? 'ACTIVE' : 'GLOBAL',
+        icon: isActive ? '●' : '',
+        status: isActive ? 'active' : undefined,
       });
     });
 
     // Add project agents
     projectAgents.forEach((agent) => {
+      const isActive = agent.id === currentAgentId;
       items.push({
         id: agent.id,
         label: agent.name,
         description: agent.description,
-        badge: 'PROJECT',
-        status: 'active',
+        badge: isActive ? 'ACTIVE' : 'PROJECT',
+        icon: isActive ? '●' : '',
+        status: isActive ? 'active' : undefined,
       });
     });
 
@@ -326,7 +345,7 @@ export const AgentManager: React.FC<AgentManagerProps> = ({ onCancel, onAgentCha
 
   const listActions: SelectListAction[] = [
     { key: '↑↓', label: '↑↓', description: 'Navigate' },
-    { key: 'Enter', label: 'Enter', description: 'Edit' },
+    { key: 'Enter', label: 'Enter', description: 'Switch/Edit' },
     { key: 'A', label: 'A', description: 'Add' },
     { key: 'P', label: 'P', description: 'Prompt' },
     { key: 'T', label: 'T', description: 'Tools' },
