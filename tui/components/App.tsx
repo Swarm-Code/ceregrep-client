@@ -13,6 +13,7 @@ import { ConversationList } from './ConversationList.js';
 import { AgentSelector } from './AgentSelector.js';
 import { ConfigPanel, ConfigData } from './ConfigPanel.js';
 import { MCPManager } from './MCPManager.js';
+import { AgentManager } from './AgentManager.js';
 import { MessageNavigator } from './MessageNavigator.js';
 import { BranchSelector } from './BranchSelector.js';
 import { CeregrepClient } from '../../sdk/typescript/index.js';
@@ -41,7 +42,7 @@ import { getTokenStats } from '../../core/tokens.js';
 import { getModeSystemPrompt } from '../mode-prompts.js';
 import { getBackgroundAgent } from '../background-agent.js';
 
-type View = 'chat' | 'conversations' | 'agents' | 'config' | 'mcp' | 'branches';
+type View = 'chat' | 'conversations' | 'agents' | 'config' | 'mcp' | 'branches' | 'agentConfig';
 type AgentMode = 'PLAN' | 'ACT' | 'DEBUG';
 
 interface AppProps {
@@ -274,21 +275,37 @@ export const App: React.FC<AppProps> = ({ initialConversationId, initialAgentId,
     // Ctrl+L to toggle conversations list
     if (key.ctrl && input === 'l') {
       setView(view === 'conversations' ? 'chat' : 'conversations');
+      return; // Prevent 'l' from being added to input
     }
 
     // Ctrl+A to toggle agent selector
     if (key.ctrl && input === 'a') {
       setView(view === 'agents' ? 'chat' : 'agents');
+      return; // Prevent 'a' from being added to input
     }
 
     // Ctrl+H to toggle help
     if (key.ctrl && input === 'h') {
       setShowHelp(!showHelp);
+      return; // Prevent 'h' from being added to input
     }
 
     // Ctrl+O to toggle verbose mode
     if (key.ctrl && input === 'o') {
       setVerboseMode(!verboseMode);
+      return; // Prevent 'o' from being added to input
+    }
+
+    // Ctrl+P to toggle MCP manager (Ctrl+M conflicts with Enter)
+    if (key.ctrl && input === 'p') {
+      setView(view === 'mcp' ? 'chat' : 'mcp');
+      return; // Prevent 'p' from being added to input
+    }
+
+    // Ctrl+K to toggle agent manager (Ctrl+G conflicts with Bell)
+    if (key.ctrl && input === 'k') {
+      setView(view === 'agentConfig' ? 'chat' : 'agentConfig');
+      return; // Prevent 'k' from being added to input
     }
 
     // Escape to stop/force stop agent execution
@@ -805,7 +822,9 @@ export const App: React.FC<AppProps> = ({ initialConversationId, initialAgentId,
                   <Text color={BLUE}>/config</Text>
                   <Text color={WHITE}>  Configure settings</Text>
                   <Text color={BLUE}>/mcp</Text>
-                  <Text color={WHITE}>  Manage tools and integrations</Text>
+                  <Text color={WHITE}>  Manage tools and integrations (Ctrl+P)</Text>
+                  <Text color={CYAN}>Ctrl+K</Text>
+                  <Text color={WHITE}>  Manage and configure agents</Text>
                   <Text></Text>
                   <Text bold color={PURPLE}>ADVANCED:</Text>
                   <Text color={BLUE}>/compact</Text>
@@ -917,6 +936,15 @@ export const App: React.FC<AppProps> = ({ initialConversationId, initialAgentId,
           <MCPManager
             onCancel={() => setView('chat')}
             onServerChange={handleMCPServerChange}
+          />
+        )}
+
+        {view === 'agentConfig' && (
+          <AgentManager
+            onCancel={() => setView('chat')}
+            onAgentChange={() => {
+              // Reload agents list if needed
+            }}
           />
         )}
 
