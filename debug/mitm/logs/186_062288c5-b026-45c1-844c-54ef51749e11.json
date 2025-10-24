@@ -1,0 +1,261 @@
+{
+  "request": {
+    "requestId": "062288c5-b026-45c1-844c-54ef51749e11",
+    "requestNumber": 186,
+    "timestamp": "2025-10-24T18:51:50.030Z",
+    "method": "POST",
+    "path": "/v1/chat/completions",
+    "headers": {
+      "content-length": "10379",
+      "accept": "application/json",
+      "content-type": "application/json",
+      "user-agent": "OpenAI/JS 4.104.0",
+      "x-stainless-lang": "js",
+      "x-stainless-package-version": "4.104.0",
+      "x-stainless-os": "Linux",
+      "x-stainless-arch": "x64",
+      "x-stainless-runtime": "node",
+      "x-stainless-runtime-version": "v24.9.0",
+      "authorization": "Bearer csk-f3e6y5t8ppf6h565dhpj3end2n82tdr95pp65m3xtx9vvnmc",
+      "x-stainless-retry-count": "0",
+      "x-stainless-timeout": "15",
+      "accept-encoding": "gzip,deflate",
+      "host": "localhost:8080",
+      "connection": "keep-alive"
+    },
+    "body": {
+      "model": "qwen-3-coder-480b",
+      "messages": [
+        {
+          "role": "system",
+          "content": "You are a helpful AI assistant with access to bash and file search tools.\n\nUse the tools available to help the user accomplish their tasks.\n\n\n\nCRITICAL INSTRUCTION - CONTEXT AND EXPLANATION REQUIREMENTS:\n\n- Give as much context as possible in your responses. It is ALWAYS better to add too much context than too little.\n\n- Use file references with line numbers in the format: filename.ts:123 or path/to/file.py:456\n\n- Explain everything in an ultra explanatory tone, assuming the user needs complete understanding.\n\n- Include specific details: function names, variable names, code snippets, file paths with line numbers.\n\n- When referencing code, ALWAYS include the file path and line number where it can be found.\n\n- Provide thorough explanations of how things work, why they work that way, and what each piece does.\n\n- Word for word: \"Better to add too much context than necessary\" - follow this principle strictly.\n\n\n\nCRITICAL INSTRUCTION - MUST USE TOOLS TO GATHER INFORMATION:\n\n- You MUST use grep to search for information before answering questions about code.\n\n- You CANNOT rely on stored context or prior knowledge about the codebase.\n\n- Everything must be read using tools before giving an explanation.\n\n- This is to ensure that you do not lazily answer questions without verifying current state.\n\n- Always grep for relevant files, read the actual code, and then provide your explanation.\n\n- Never answer based solely on assumptions or memory - always verify with tools first."
+        },
+        {
+          "role": "user",
+          "content": "Previous conversation context:\n\n- User asked: Analyze the complete architecture of the system → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Grep → Assistant used tools: Grep → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Grep → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Grep → Assistant used tools: Bash → Assistant used tools: Grep → Assistant used tools: Bash → Assistant used tools: Grep → Assistant used tools: Grep → Assistant used tools: Grep → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash\n\n[Conversation compacted. Continuing from recent context:]"
+        },
+        {
+          "role": "assistant",
+          "tool_calls": [
+            {
+              "id": "a61e26eef",
+              "type": "function",
+              "function": {
+                "name": "Bash",
+                "arguments": "{\"command\":\"grep -A 10 -B 10 \\\"interface ToolUseBlock\\\\|type ToolUseBlock\\\" core/messages.ts\"}"
+              }
+            }
+          ],
+          "content": "Let's check if there's a local definition by looking at more of the file:"
+        },
+        {
+          "role": "tool",
+          "tool_call_id": "a61e26eef",
+          "content": "Exit code 1"
+        },
+        {
+          "role": "assistant",
+          "tool_calls": [
+            {
+              "id": "3eb647d0c",
+              "type": "function",
+              "function": {
+                "name": "Bash",
+                "arguments": "{\"command\":\"grep -A 5 -B 5 \\\"ToolUseBlock\\\" core/agent.ts\"}"
+              }
+            }
+          ],
+          "content": "Let's check the agent.ts file to see how ToolUseBlock is used:"
+        },
+        {
+          "role": "tool",
+          "tool_call_id": "3eb647d0c",
+          "content": "INTERRUPT_MESSAGE,                                                            \n  INTERRUPT_MESSAGE_FOR_TOOL_USE,                                               \n} from './messages.js';                                                         \nimport { countTokens, shouldCompact } from './tokens.js';                       \nimport { executePreToolUseHooks, executePostToolUseHooks } from './hooks.js';   \n--                                                                              \n  }                                                                             \n                                                                                \n  yield assistantMessage;                                                       \n                                                                                \n  // Extract tool use blocks                                                    \n  const toolUseMessages = extractToolUseBlocks(assistantMessage);               \n                                                                                \n  if (toolUseContext.options.debug) {                                           \n    console.log('[AGENT] Tool use blocks found:', toolUseMessages.length);      \n    toolUseMessages.forEach(tu => console.log('  -', tu.name));                 \n  }                                                                             \n--                                                                              \n                                                                                \n/**                                                                             \n * Execute tools serially (one at a time)                                       \n */                                                                             \nasync function* runToolsSerially(                                               \n  toolUseMessages: ToolUseBlock[],                                              \n  assistantMessage: AssistantMessage,                                           \n  canUseTool: CanUseToolFn,                                                     \n  toolUseContext: ToolContext,                                                  \n  shouldSkipPermissionCheck: boolean,                                           \n): AsyncGenerator<Message, void> {"
+        },
+        {
+          "role": "assistant",
+          "tool_calls": [
+            {
+              "id": "937bdefeb",
+              "type": "function",
+              "function": {
+                "name": "Bash",
+                "arguments": "{\"command\":\"grep -A 5 -B 5 \\\"ToolUseBlock\\\" core/hooks.ts\"}"
+              }
+            }
+          ],
+          "content": "Let's also check the hooks.ts file to see how ToolUseBlock is used there:"
+        },
+        {
+          "role": "tool",
+          "tool_call_id": "937bdefeb",
+          "content": "Exit code 1"
+        },
+        {
+          "role": "assistant",
+          "tool_calls": [
+            {
+              "id": "cc40320fe",
+              "type": "function",
+              "function": {
+                "name": "Bash",
+                "arguments": "{\"command\":\"grep -A 5 -B 5 \\\"ToolUseBlock\\\" core/tools.ts\"}"
+              }
+            }
+          ],
+          "content": "Let's check the tools.ts file:"
+        },
+        {
+          "role": "tool",
+          "tool_call_id": "cc40320fe",
+          "content": "grep: core/tools.ts: No such file or directory\nExit code 2"
+        },
+        {
+          "role": "assistant",
+          "tool_calls": [
+            {
+              "id": "a2bee1766",
+              "type": "function",
+              "function": {
+                "name": "Bash",
+                "arguments": "{\"command\":\"ls -la core/\"}"
+              }
+            }
+          ],
+          "content": "Let's check what files are available in the core directory:"
+        },
+        {
+          "role": "tool",
+          "tool_call_id": "a2bee1766",
+          "content": "total 36                                                                        \ndrwxr-xr-x 1 alejandro alejandro    86 Oct 22 19:57 .                           \ndrwxr-xr-x 1 alejandro alejandro   892 Oct 24 14:48 ..                          \n-rw-r--r-- 1 alejandro alejandro 12183 Oct 22 19:57 agent.ts                    \n-rw-r--r-- 1 alejandro alejandro  5944 Oct 22 19:57 hooks.ts                    \n-rw-r--r-- 1 alejandro alejandro  6704 Oct 22 19:57 messages.ts                 \n-rw-r--r-- 1 alejandro alejandro  2772 Oct 21 12:46 tokens.ts                   \n-rw-r--r-- 1 alejandro alejandro  3717 Oct 21 12:46 tool.ts"
+        }
+      ],
+      "temperature": 0.7,
+      "top_p": 0.8,
+      "tools": [
+        {
+          "type": "function",
+          "function": {
+            "name": "Bash",
+            "description": "Tool: Bash",
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "command": {
+                  "type": "string",
+                  "description": "The command to execute"
+                },
+                "timeout": {
+                  "type": "number",
+                  "description": "Optional timeout in milliseconds (max 600000)"
+                }
+              },
+              "required": [
+                "command"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        {
+          "type": "function",
+          "function": {
+            "name": "Grep",
+            "description": "Tool: Grep",
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "pattern": {
+                  "type": "string",
+                  "description": "The regular expression pattern to search for in file contents"
+                },
+                "path": {
+                  "type": "string",
+                  "description": "The directory to search in. Defaults to the current working directory."
+                },
+                "include": {
+                  "type": "string",
+                  "description": "File pattern to include in the search (e.g. \"*.ts\", \"*.{ts,tsx}\")"
+                }
+              },
+              "required": [
+                "pattern"
+              ],
+              "additionalProperties": false
+            }
+          }
+        }
+      ],
+      "tool_choice": "auto"
+    },
+    "bodySize": 10277
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "date": "Fri, 24 Oct 2025 18:51:50 GMT",
+      "content-type": "application/json",
+      "transfer-encoding": "chunked",
+      "connection": "keep-alive",
+      "server": "cloudflare",
+      "x-request-id": "993baaf5fb7441bf-ATL",
+      "x-ratelimit-limit-requests-day": "172800",
+      "x-ratelimit-limit-tokens-minute": "1500000",
+      "x-ratelimit-remaining-requests-day": "170685",
+      "x-ratelimit-remaining-tokens-minute": "1315132",
+      "x-ratelimit-reset-requests-day": "18489.724001646042",
+      "x-ratelimit-reset-tokens-minute": "9.72400164604187",
+      "inference-id": "chatcmpl-73d03363-78b6-4a56-80f2-1e752950efb1",
+      "referrer-policy": "strict-origin-when-cross-origin",
+      "x-content-type-options": "nosniff",
+      "strict-transport-security": "max-age=3600; includeSubDomains",
+      "cf-cache-status": "DYNAMIC",
+      "set-cookie": "__cf_bm=ky7W0e4YpbtlfXXqG.0HNTZHda6wIxsgg0dHbK.jglQ-1761331910.0800605-1.0.1.1-ZVefWLL2ja_mT5CxwvHvdIvTJC4VKCMQi9AmxgoGMJUFnzVTU2bpl7vDmwv7dZ.vafLbHHXJOUiM85eORaI5LPNHckabkQnk1mRWOoeQNF0_u592vkIlT.UXrZfMSHyA; HttpOnly; Secure; Path=/; Expires=Fri, 24 Oct 2025 19:21:50 GMT",
+      "cf-ray": "993baaf5fb7441bf-ATL",
+      "alt-svc": "h3=\":443\"; ma=86400"
+    },
+    "body": {
+      "id": "chatcmpl-73d03363-78b6-4a56-80f2-1e752950efb1",
+      "choices": [
+        {
+          "finish_reason": "tool_calls",
+          "index": 0,
+          "message": {
+            "content": "Let's check the tool.ts file to see if it contains the ToolUseBlock definition:\n\n",
+            "tool_calls": [
+              {
+                "id": "1a5ba2f2b",
+                "type": "function",
+                "function": {
+                  "name": "Bash",
+                  "arguments": "{\"command\": \"grep -A 10 -B 10 \\\"interface ToolUseBlock\\\\|type ToolUseBlock\\\\|class ToolUseBlock\\\" core/tool.ts\"}"
+                }
+              }
+            ],
+            "role": "assistant"
+          }
+        }
+      ],
+      "created": 1761331910,
+      "model": "qwen-3-coder-480b",
+      "system_fingerprint": "fp_386b539e7b02ce3613b7",
+      "object": "chat.completion",
+      "usage": {
+        "prompt_tokens": 1907,
+        "completion_tokens": 71,
+        "total_tokens": 1978,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        }
+      },
+      "time_info": {
+        "queue_time": 0.000302212,
+        "prompt_time": 0.042723142,
+        "completion_time": 0.044104728,
+        "total_time": 0.08844304084777832,
+        "created": 1761331910.1557565
+      }
+    },
+    "duration": 333
+  }
+}

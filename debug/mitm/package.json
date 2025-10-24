@@ -1,0 +1,23 @@
+{
+  "name": "cerebras-mitm-proxy",
+  "version": "1.0.0",
+  "description": "MITM proxy router for debugging Cerebras API requests",
+  "main": "cerebras-proxy.js",
+  "scripts": {
+    "start": "node cerebras-proxy.js",
+    "dev": "nodemon cerebras-proxy.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "axios": "^1.6.0",
+    "uuid": "^9.0.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.1"
+  },
+  "engines": {
+    "node": ">=14.0.0"
+  },
+  "author": "",
+  "license": "MIT"
+}

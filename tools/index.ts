@@ -7,6 +7,10 @@ import { Tool } from '../core/tool.js';
 import { BashTool } from './bash.js';
 import { GrepTool } from './grep.js';
 
+// Cache for memoized tool loading
+let cachedTools: Tool[] | null = null;
+let cachedMCPTools: Tool[] | null = null;
+
 /**
  * Get all built-in tools (Bash, Grep)
  * Does NOT include MCP tools
@@ -18,12 +22,18 @@ export function getAllTools(): Tool[] {
 /**
  * Get all enabled tools including MCP tools and agent tools
  * Filters by isEnabled() method and MCP server configuration
+ * MEMOIZED: Tools are loaded once and cached for the session
  *
  * @param includeMCP - Whether to include MCP tools (default: true)
  * @param includeAgents - Whether to include agent tools (default: true)
  * @returns Array of enabled tools
  */
 export async function getTools(includeMCP: boolean = true, includeAgents: boolean = true): Promise<Tool[]> {
+  // Return cached tools if already loaded
+  if (cachedTools !== null) {
+    return cachedTools;
+  }
+
   let tools = getAllTools();
 
   // Add MCP tools if requested
@@ -116,7 +126,20 @@ export async function getTools(includeMCP: boolean = true, includeAgents: boolea
     }),
   );
 
-  return tools.filter((_, i) => enabledFlags[i]);
+  const enabledTools = tools.filter((_, i) => enabledFlags[i]);
+
+  // Cache the enabled tools for future calls
+  cachedTools = enabledTools;
+
+  return enabledTools;
+}
+
+/**
+ * Clear the tool cache (useful for testing or when MCP servers change)
+ */
+export function clearToolCache(): void {
+  cachedTools = null;
+  cachedMCPTools = null;
 }
 
 // Re-export individual tools
