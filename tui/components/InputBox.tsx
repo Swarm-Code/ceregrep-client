@@ -250,6 +250,12 @@ export const InputBox: React.FC<InputBoxProps> = ({
       }
     }
 
+    // Block Ctrl+R and other app-level shortcuts from being typed into input
+    if (key.ctrl && (input === 'r' || input === 't' || input === 'a' || input === 'h' || input === 'o' || input === 'l' || input === 'b')) {
+      // These are handled at the App level, don't type them
+      return;
+    }
+
     // Handle prompt history navigation (only when not in autocomplete mode)
     if (onNavigateHistory && !showFileSuggestions && !showCommandSuggestions) {
       if (key.upArrow) {

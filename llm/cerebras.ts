@@ -907,7 +907,7 @@ export async function queryCerebras(
 
         // CRITICAL: Log response body if available for 400 errors
         if (status === 400) {
-          console.error(`\n❌ [${new Date().toISOString()}] 400 Bad Request Error - Detailed Analysis:`);
+          console.error(`\n❌ [${new Date().toISOString()}] 400 Bad Request Error - FULL DEBUGGING:`);
           console.error(`   Error Type: ${errorType}`);
           console.error(`   Message: ${error.message}`);
 
@@ -925,57 +925,70 @@ export async function queryCerebras(
           console.error(`   - Message Count: ${requestParams.messages.length}`);
           console.error(`   - Tool Count: ${requestParams.tools?.length || 0}`);
 
+          // CRITICAL: Show the FULL request being sent
+          console.error(`\n   🔍 FULL REQUEST PAYLOAD:`);
+          console.error(JSON.stringify(requestParams, null, 2));
+
           // ENHANCED: Analyze each message for potential issues
-          console.error(`\n   📋 Message Analysis:`);
+          console.error(`\n   📋 DETAILED MESSAGE-BY-MESSAGE ANALYSIS:`);
+          console.error(`   ============================================`);
           requestParams.messages.forEach((msg: any, idx: number) => {
-            console.error(`   Message #${idx + 1} (${msg.role}):`);
+            console.error(`\n   📧 MESSAGE #${idx + 1} of ${requestParams.messages.length} - ROLE: ${msg.role}`);
+            console.error(`   ${'─'.repeat(60)}`);
 
             // Check content
             if (msg.content !== undefined) {
               const contentStr = typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content);
               const contentLen = contentStr.length;
 
+              console.error(`   📝 Content (${contentLen} chars):`);
+              console.error(`   ${contentStr.substring(0, 500)}${contentLen > 500 ? '...[TRUNCATED]' : ''}`);
+              console.error(``);
+
               // Look for problematic patterns
               const hasUnescapedQuotes = contentStr.match(/[^\\]"/g);
               const hasSingleQuotes = contentStr.includes("'");
               const hasNewlines = contentStr.includes('\n');
-
-              console.error(`     - Content length: ${contentLen} chars`);
-              if (contentLen > 200) {
-                console.error(`     - Content preview: ${contentStr.substring(0, 200)}...`);
-              } else {
-                console.error(`     - Content: ${contentStr}`);
-              }
+              const hasBackslashes = contentStr.includes('\\');
 
               // Flag potential issues
-              if (hasUnescapedQuotes) {
-                console.error(`     ⚠️  WARNING: Detected potentially unescaped quotes`);
+              const warnings = [];
+              if (hasUnescapedQuotes) warnings.push('⚠️  Potentially unescaped quotes');
+              if (hasSingleQuotes) warnings.push('ℹ️  Single quotes/apostrophes');
+              if (hasNewlines) warnings.push('ℹ️  Newlines');
+              if (hasBackslashes) warnings.push('⚠️  Backslashes (check escaping)');
+
+              if (warnings.length > 0) {
+                console.error(`   🔍 Flags: ${warnings.join(' | ')}`);
               }
-              if (hasSingleQuotes) {
-                console.error(`     ℹ️  Contains single quotes/apostrophes`);
-              }
-              if (hasNewlines) {
-                console.error(`     ℹ️  Contains newlines`);
-              }
+            } else {
+              console.error(`   📝 Content: <undefined>`);
             }
 
             // Check tool_calls
             if (msg.tool_calls) {
-              console.error(`     - Tool Calls: ${msg.tool_calls.length}`);
+              console.error(`   🛠️  Tool Calls (${msg.tool_calls.length}):`);
               msg.tool_calls.forEach((tc: any, tcIdx: number) => {
-                console.error(`       [${tcIdx + 1}] ${tc.function?.name}`);
+                console.error(`     [${tcIdx + 1}] ${tc.function?.name} (id: ${tc.id})`);
                 if (tc.function?.arguments) {
+                  console.error(`         Arguments: ${tc.function.arguments}`);
                   try {
                     JSON.parse(tc.function.arguments);
-                    console.error(`         ✓ Arguments are valid JSON`);
+                    console.error(`         ✓ Valid JSON`);
                   } catch (e) {
-                    console.error(`         ❌ INVALID JSON in arguments: ${e}`);
-                    console.error(`         Arguments: ${tc.function.arguments}`);
+                    console.error(`         ❌ INVALID JSON: ${e}`);
+                    console.error(`         ⚠️  THIS IS LIKELY THE ISSUE!`);
                   }
                 }
               });
             }
+
+            // Check tool_call_id for tool messages
+            if (msg.role === 'tool' && msg.tool_call_id) {
+              console.error(`   🔗 Tool Call ID: ${msg.tool_call_id}`);
+            }
           });
+          console.error(`\n   ============================================`);
 
           console.error(`\n   💡 Common 400 Error Causes:`);
           console.error(`   1. Unescaped quotes in message content (e.g., "project"s" instead of "project's")`);

@@ -4,7 +4,7 @@
  */
 
 import React, { useMemo } from 'react';
-import { Box, Text } from 'ink';
+import { Box, Text, useInput } from 'ink';
 import { SelectList, SelectListItem, SelectListAction } from './common/SelectList.js';
 import { PromptHistoryEntry } from '../prompt-history.js';
 
@@ -80,11 +80,18 @@ export const PromptSearch: React.FC<PromptSearchProps> = ({
     }
   };
 
+  // Handle keyboard input for empty state
+  useInput((input, key) => {
+    if (promptItems.length === 0 && key.escape) {
+      onCancel();
+    }
+  });
+
   const listActions: SelectListAction[] = [
     { key: '↑↓', label: '↑↓', description: 'Navigate' },
     { key: 'Enter', label: 'Enter', description: 'Select' },
     { key: '/', label: '/', description: 'Search' },
-    { key: 'Q', label: 'Q', description: 'Cancel' },
+    { key: 'Esc', label: 'Esc', description: 'Cancel' },
   ];
 
   if (promptItems.length === 0) {
@@ -95,7 +102,7 @@ export const PromptSearch: React.FC<PromptSearchProps> = ({
           <Text color={DIM_WHITE}>No prompts in history yet.</Text>
         </Box>
         <Box marginTop={1}>
-          <Text color={DIM_WHITE}>Press Q to go back.</Text>
+          <Text color={DIM_WHITE}>Press Esc to go back.</Text>
         </Box>
       </Box>
     );
