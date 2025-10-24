@@ -37,3 +37,4 @@ __pycache__/
 *.so
 .Python
 uv.lock
+.idea/

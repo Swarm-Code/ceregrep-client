@@ -101,9 +101,12 @@ export async function getRemoteVersion(): Promise<string> {
       }
     }
 
-    // Fetch from npm registry
+    // Get the current package name dynamically
+    const { name: packageName } = getLocalPackageInfo();
+
+    // Fetch from npm registry using the dynamic package name
     https
-      .get('https://registry.npmjs.org/ceregrep/latest', (res) => {
+      .get(`https://registry.npmjs.org/${packageName}/latest`, (res) => {
         let data = '';
 
         res.on('data', (chunk) => {
