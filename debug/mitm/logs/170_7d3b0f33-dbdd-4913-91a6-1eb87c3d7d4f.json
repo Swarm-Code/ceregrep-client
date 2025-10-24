@@ -1,0 +1,261 @@
+{
+  "request": {
+    "requestId": "7d3b0f33-dbdd-4913-91a6-1eb87c3d7d4f",
+    "requestNumber": 170,
+    "timestamp": "2025-10-24T18:51:43.589Z",
+    "method": "POST",
+    "path": "/v1/chat/completions",
+    "headers": {
+      "content-length": "18322",
+      "accept": "application/json",
+      "content-type": "application/json",
+      "user-agent": "OpenAI/JS 4.104.0",
+      "x-stainless-lang": "js",
+      "x-stainless-package-version": "4.104.0",
+      "x-stainless-os": "Linux",
+      "x-stainless-arch": "x64",
+      "x-stainless-runtime": "node",
+      "x-stainless-runtime-version": "v24.9.0",
+      "authorization": "Bearer csk-f3e6y5t8ppf6h565dhpj3end2n82tdr95pp65m3xtx9vvnmc",
+      "x-stainless-retry-count": "0",
+      "x-stainless-timeout": "15",
+      "accept-encoding": "gzip,deflate",
+      "host": "localhost:8080",
+      "connection": "keep-alive"
+    },
+    "body": {
+      "model": "qwen-3-coder-480b",
+      "messages": [
+        {
+          "role": "system",
+          "content": "You are a helpful AI assistant with access to bash and file search tools.\n\nUse the tools available to help the user accomplish their tasks.\n\n\n\nCRITICAL INSTRUCTION - CONTEXT AND EXPLANATION REQUIREMENTS:\n\n- Give as much context as possible in your responses. It is ALWAYS better to add too much context than too little.\n\n- Use file references with line numbers in the format: filename.ts:123 or path/to/file.py:456\n\n- Explain everything in an ultra explanatory tone, assuming the user needs complete understanding.\n\n- Include specific details: function names, variable names, code snippets, file paths with line numbers.\n\n- When referencing code, ALWAYS include the file path and line number where it can be found.\n\n- Provide thorough explanations of how things work, why they work that way, and what each piece does.\n\n- Word for word: \"Better to add too much context than necessary\" - follow this principle strictly.\n\n\n\nCRITICAL INSTRUCTION - MUST USE TOOLS TO GATHER INFORMATION:\n\n- You MUST use grep to search for information before answering questions about code.\n\n- You CANNOT rely on stored context or prior knowledge about the codebase.\n\n- Everything must be read using tools before giving an explanation.\n\n- This is to ensure that you do not lazily answer questions without verifying current state.\n\n- Always grep for relevant files, read the actual code, and then provide your explanation.\n\n- Never answer based solely on assumptions or memory - always verify with tools first."
+        },
+        {
+          "role": "user",
+          "content": "Previous conversation context:\n\n- User asked: Analyze the complete architecture of the system → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Grep → Assistant used tools: Grep → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Grep\n\n[Conversation compacted. Continuing from recent context:]"
+        },
+        {
+          "role": "assistant",
+          "tool_calls": [
+            {
+              "id": "6720441ad",
+              "type": "function",
+              "function": {
+                "name": "Bash",
+                "arguments": "{\"command\":\"cat core/messages.ts\"}"
+              }
+            }
+          ],
+          "content": "Let's examine the messages.ts file:"
+        },
+        {
+          "role": "tool",
+          "tool_call_id": "6720441ad",
+          "content": "result.push(message);                                                 \n          break;                                                                \n        }                                                                       \n      }                                                                         \n    });                                                                         \n                                                                                \n  return result;                                                                \n}                                                                               \n                                                                                \n/**                                                                             \n * Extract tool use blocks from assistant message                               \n */                                                                             \nexport function extractToolUseBlocks(message: AssistantMessage): ToolUseBlock[] \n{                                                                               \n  return [                                                                      \n    ...(message.message.content?.filter(_ => _.type === 'tool_use') || []),     \n    ...(message.message.tool_use || []),                                        \n  ] as ToolUseBlock[];                                                          \n}                                                                               \n                                                                                \n/**                                                                             \n * Extract text content from assistant message                                  \n */                                                                             \nexport function extractTextContent(message: AssistantMessage): string {         \n  return message.message.content                                                \n    .filter(c => c.type === 'text')                                             \n    .map(c => (c as any).text)                                                  \n    .join(' ');                                                                 \n}"
+        },
+        {
+          "role": "assistant",
+          "tool_calls": [
+            {
+              "id": "750c0b4b0",
+              "type": "function",
+              "function": {
+                "name": "Bash",
+                "arguments": "{\"command\":\"head -30 core/messages.ts\"}"
+              }
+            }
+          ],
+          "content": "Let's look at the beginning of the messages.ts file to see the type definitions:"
+        },
+        {
+          "role": "tool",
+          "tool_call_id": "750c0b4b0",
+          "content": "import { randomUUID, UUID } from 'crypto';                                      \nimport {                                                                        \n  Message as APIMessage,                                                        \n  MessageParam,                                                                 \n  ContentBlock,                                                                 \n  ContentBlockParam,                                                            \n  ToolResultBlockParam,                                                         \n  ToolUseBlock,                                                                 \n} from '@anthropic-ai/sdk/resources/index.mjs';                                 \nimport { last } from 'lodash-es';                                               \n                                                                                \nexport type { ToolUseBlock };                                                   \n                                                                                \nexport const INTERRUPT_MESSAGE = '[Request interrupted by user]';               \nexport const INTERRUPT_MESSAGE_FOR_TOOL_USE = '[Request interrupted by user for \ntool use]';                                                                     \nexport const CANCEL_MESSAGE =                                                   \n  \"The user doesn't want to take this action right now. STOP what you are doing \nand wait for the user to tell you how to proceed.\";                             \nexport const REJECT_MESSAGE =                                                   \n  \"The user doesn't want to proceed with this tool use. The tool use was rejecte\nd (eg. if it was a file edit, the new_string was NOT written to the file). STOP \nwhat you are doing and wait for the user to tell you how to proceed.\";          \nexport const NO_RESPONSE_REQUESTED = 'No response requested.';                  \nexport const NO_CONTENT_MESSAGE = '[No content]';                               \n                                                                                \nexport const SYNTHETIC_ASSISTANT_MESSAGES = new Set([                           \n  INTERRUPT_MESSAGE,                                                            \n  INTERRUPT_MESSAGE_FOR_TOOL_USE,"
+        },
+        {
+          "role": "assistant",
+          "tool_calls": [
+            {
+              "id": "1ce1a2bc5",
+              "type": "function",
+              "function": {
+                "name": "Bash",
+                "arguments": "{\"command\":\"head -60 core/messages.ts\"}"
+              }
+            }
+          ],
+          "content": "Let's continue looking at the type definitions:"
+        },
+        {
+          "role": "tool",
+          "tool_call_id": "1ce1a2bc5",
+          "content": "REJECT_MESSAGE,                                                               \n  NO_RESPONSE_REQUESTED,                                                        \n]);                                                                             \n                                                                                \nexport type FullToolUseResult = {                                               \n  data: unknown;                                                                \n  resultForAssistant: ToolResultBlockParam['content'];                          \n};                                                                              \n                                                                                \nexport type UserMessage = {                                                     \n  message: MessageParam;                                                        \n  type: 'user';                                                                 \n  uuid: UUID;                                                                   \n  id?: string; // Message ID for conversation navigation                        \n  timestamp?: number; // Message creation timestamp                             \n  toolUseResult?: FullToolUseResult;                                            \n  displayContent?: string | ContentBlockParam[];                                \n};                                                                              \n                                                                                \nexport type AssistantMessage = {                                                \n  costUSD: number;                                                              \n  durationMs: number;                                                           \n  message: APIMessage & {                                                       \n    tool_use?: ToolUseBlock[];                                                  \n  };                                                                            \n  type: 'assistant';                                                            \n  uuid: UUID;                                                                   \n  id?: string; // Message ID for conversation navigation                        \n  timestamp?: number; // Message creation timestamp"
+        },
+        {
+          "role": "assistant",
+          "tool_calls": [
+            {
+              "id": "f57786659",
+              "type": "function",
+              "function": {
+                "name": "Bash",
+                "arguments": "{\"command\":\"head -80 core/messages.ts\"}"
+              }
+            }
+          ],
+          "content": "Let's see more of the AssistantMessage type definition:"
+        },
+        {
+          "role": "tool",
+          "tool_call_id": "f57786659",
+          "content": "costUSD: number;                                                              \n  durationMs: number;                                                           \n  message: APIMessage & {                                                       \n    tool_use?: ToolUseBlock[];                                                  \n  };                                                                            \n  type: 'assistant';                                                            \n  uuid: UUID;                                                                   \n  id?: string; // Message ID for conversation navigation                        \n  timestamp?: number; // Message creation timestamp                             \n  isApiErrorMessage?: boolean;                                                  \n};                                                                              \n                                                                                \nexport type ProgressMessage = {                                                 \n  content: AssistantMessage;                                                    \n  normalizedMessages: NormalizedMessage[];                                      \n  siblingToolUseIDs: Set<string>;                                               \n  tools: any[];                                                                 \n  toolUseID: string;                                                            \n  type: 'progress';                                                             \n  uuid: UUID;                                                                   \n};                                                                              \n                                                                                \nexport type Message = UserMessage | AssistantMessage | ProgressMessage;         \n                                                                                \nexport type NormalizedMessage = UserMessage | AssistantMessage;                 \n                                                                                \nfunction baseCreateAssistantMessage(                                            \n  content: ContentBlock[],                                                      \n  extra?: Partial<AssistantMessage>,"
+        },
+        {
+          "role": "assistant",
+          "tool_calls": [
+            {
+              "id": "85f2c228f",
+              "type": "function",
+              "function": {
+                "name": "Bash",
+                "arguments": "{\"command\":\"head -50 core/agent.ts\"}"
+              }
+            }
+          ],
+          "content": "Let's also check the agent.ts file to understand how messages are used:"
+        },
+        {
+          "role": "tool",
+          "tool_call_id": "85f2c228f",
+          "content": "import { getConfig } from '../config/loader.js';                                \n                                                                                \nexport type CanUseToolFn = (                                                    \n  toolName: string,                                                             \n  input: Record<string, any>,                                                   \n  shouldSkipPermissionCheck?: boolean,                                          \n) => Promise<boolean>;                                                          \n                                                                                \n/**                                                                             \n * Main agent query loop                                                        \n * Recursively executes until conversation completes (no more tool calls)       \n *                                                                              \n * @param messages - Conversation history                                       \n * @param systemPrompt - System prompt array (will be formatted with context)   \n * @param context - Environment context (cwd, git status, etc.)                 \n * @param canUseTool - Permission checker function                              \n * @param toolUseContext - Tool execution context                               \n * @param querySonnetFn - LLM query function (injected for modularity)          \n * @returns AsyncGenerator yielding messages as they're created                 \n */                                                                             \nexport async function* query(                                                   \n  messages: Message[],                                                          \n  systemPrompt: string[],                                                       \n  context: { [k: string]: string },                                             \n  canUseTool: CanUseToolFn,                                                     \n  toolUseContext: ToolContext,                                                  \n  querySonnetFn: (                                                              \n    messages: any[],                                                            \n    systemPrompt: string[],"
+        }
+      ],
+      "temperature": 0.7,
+      "top_p": 0.8,
+      "tools": [
+        {
+          "type": "function",
+          "function": {
+            "name": "Bash",
+            "description": "Tool: Bash",
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "command": {
+                  "type": "string",
+                  "description": "The command to execute"
+                },
+                "timeout": {
+                  "type": "number",
+                  "description": "Optional timeout in milliseconds (max 600000)"
+                }
+              },
+              "required": [
+                "command"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        {
+          "type": "function",
+          "function": {
+            "name": "Grep",
+            "description": "Tool: Grep",
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "pattern": {
+                  "type": "string",
+                  "description": "The regular expression pattern to search for in file contents"
+                },
+                "path": {
+                  "type": "string",
+                  "description": "The directory to search in. Defaults to the current working directory."
+                },
+                "include": {
+                  "type": "string",
+                  "description": "File pattern to include in the search (e.g. \"*.ts\", \"*.{ts,tsx}\")"
+                }
+              },
+              "required": [
+                "pattern"
+              ],
+              "additionalProperties": false
+            }
+          }
+        }
+      ],
+      "tool_choice": "auto"
+    },
+    "bodySize": 18252
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "date": "Fri, 24 Oct 2025 18:51:43 GMT",
+      "content-type": "application/json",
+      "transfer-encoding": "chunked",
+      "connection": "keep-alive",
+      "server": "cloudflare",
+      "x-request-id": "993baacdbad641bf-ATL",
+      "x-ratelimit-limit-requests-day": "172800",
+      "x-ratelimit-limit-tokens-minute": "1500000",
+      "x-ratelimit-remaining-requests-day": "170701",
+      "x-ratelimit-remaining-tokens-minute": "1347021",
+      "x-ratelimit-reset-requests-day": "18496.03870010376",
+      "x-ratelimit-reset-tokens-minute": "16.038700103759766",
+      "inference-id": "chatcmpl-5fea3b65-7de5-4a19-90ef-acdc3f0ae5e0",
+      "referrer-policy": "strict-origin-when-cross-origin",
+      "x-content-type-options": "nosniff",
+      "strict-transport-security": "max-age=3600; includeSubDomains",
+      "cf-cache-status": "DYNAMIC",
+      "set-cookie": "__cf_bm=Aq6FzgLOYgh8.k47Ylbl.juBlX_KqSJ_By0zkC00i1w-1761331903.6405785-1.0.1.1-6QdKF6q93j2tHvxzqifAUFAeUj00PivGLwXaH0UlvwHUe9vKj416yR821j2l5M6HYyzt2v5xjyPjL4vJnAkGF1.P_R6L2FIjB5WX9nfbR4Jk_GhJAGHouQ7yJ2zjhgNL; HttpOnly; Secure; Path=/; Expires=Fri, 24 Oct 2025 19:21:43 GMT",
+      "cf-ray": "993baacdbad641bf-ATL",
+      "alt-svc": "h3=\":443\"; ma=86400"
+    },
+    "body": {
+      "id": "chatcmpl-5fea3b65-7de5-4a19-90ef-acdc3f0ae5e0",
+      "choices": [
+        {
+          "finish_reason": "tool_calls",
+          "index": 0,
+          "message": {
+            "content": "Let's look at more of the agent.ts file to see how messages are processed:\n\n",
+            "tool_calls": [
+              {
+                "id": "61857ad7c",
+                "type": "function",
+                "function": {
+                  "name": "Bash",
+                  "arguments": "{\"command\": \"grep -n \\\"extractToolUseBlocks\\\\|extractTextContent\\\" core/agent.ts\"}"
+                }
+              }
+            ],
+            "role": "assistant"
+          }
+        }
+      ],
+      "created": 1761331901,
+      "model": "qwen-3-coder-480b",
+      "system_fingerprint": "fp_386b539e7b02ce3613b7",
+      "object": "chat.completion",
+      "usage": {
+        "prompt_tokens": 2453,
+        "completion_tokens": 56,
+        "total_tokens": 2509,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        }
+      },
+      "time_info": {
+        "queue_time": 0.00029331,
+        "prompt_time": 0.0777803,
+        "completion_time": 0.042886965,
+        "total_time": 0.12350702285766602,
+        "created": 1761331901.264397
+      }
+    },
+    "duration": 437
+  }
+}

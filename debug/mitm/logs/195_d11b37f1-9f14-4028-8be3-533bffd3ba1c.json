@@ -1,0 +1,261 @@
+{
+  "request": {
+    "requestId": "d11b37f1-9f14-4028-8be3-533bffd3ba1c",
+    "requestNumber": 195,
+    "timestamp": "2025-10-24T18:51:54.153Z",
+    "method": "POST",
+    "path": "/v1/chat/completions",
+    "headers": {
+      "content-length": "17289",
+      "accept": "application/json",
+      "content-type": "application/json",
+      "user-agent": "OpenAI/JS 4.104.0",
+      "x-stainless-lang": "js",
+      "x-stainless-package-version": "4.104.0",
+      "x-stainless-os": "Linux",
+      "x-stainless-arch": "x64",
+      "x-stainless-runtime": "node",
+      "x-stainless-runtime-version": "v24.9.0",
+      "authorization": "Bearer csk-f3e6y5t8ppf6h565dhpj3end2n82tdr95pp65m3xtx9vvnmc",
+      "x-stainless-retry-count": "0",
+      "x-stainless-timeout": "15",
+      "accept-encoding": "gzip,deflate",
+      "host": "localhost:8080",
+      "connection": "keep-alive"
+    },
+    "body": {
+      "model": "qwen-3-coder-480b",
+      "messages": [
+        {
+          "role": "system",
+          "content": "You are a helpful AI assistant with access to bash and file search tools.\n\nUse the tools available to help the user accomplish their tasks.\n\n\n\nCRITICAL INSTRUCTION - CONTEXT AND EXPLANATION REQUIREMENTS:\n\n- Give as much context as possible in your responses. It is ALWAYS better to add too much context than too little.\n\n- Use file references with line numbers in the format: filename.ts:123 or path/to/file.py:456\n\n- Explain everything in an ultra explanatory tone, assuming the user needs complete understanding.\n\n- Include specific details: function names, variable names, code snippets, file paths with line numbers.\n\n- When referencing code, ALWAYS include the file path and line number where it can be found.\n\n- Provide thorough explanations of how things work, why they work that way, and what each piece does.\n\n- Word for word: \"Better to add too much context than necessary\" - follow this principle strictly.\n\n\n\nCRITICAL INSTRUCTION - MUST USE TOOLS TO GATHER INFORMATION:\n\n- You MUST use grep to search for information before answering questions about code.\n\n- You CANNOT rely on stored context or prior knowledge about the codebase.\n\n- Everything must be read using tools before giving an explanation.\n\n- This is to ensure that you do not lazily answer questions without verifying current state.\n\n- Always grep for relevant files, read the actual code, and then provide your explanation.\n\n- Never answer based solely on assumptions or memory - always verify with tools first."
+        },
+        {
+          "role": "user",
+          "content": "Previous conversation context:\n\n- User asked: Analyze the complete architecture of the system → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Grep → Assistant used tools: Grep → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Grep → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Grep → Assistant used tools: Bash → Assistant used tools: Grep → Assistant used tools: Bash → Assistant used tools: Grep → Assistant used tools: Grep → Assistant used tools: Grep → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash\n\n[Conversation compacted. Continuing from recent context:]"
+        },
+        {
+          "role": "assistant",
+          "tool_calls": [
+            {
+              "id": "0a3f8d525",
+              "type": "function",
+              "function": {
+                "name": "Bash",
+                "arguments": "{\"command\":\"cat core/tokens.ts\"}"
+              }
+            }
+          ],
+          "content": "Now I understand! The `ToolUseBlock` type is imported from the Anthropic SDK, not defined locally. Let's check the tokens.ts file to see how tokens are handled:"
+        },
+        {
+          "role": "tool",
+          "tool_call_id": "0a3f8d525",
+          "content": "*/                                                                             \nexport function getTokenStats(messages: Message[]): {                           \n  total: number;                                                                \n  cached: number;                                                               \n  input: number;                                                                \n  output: number;                                                               \n} {                                                                             \n  let i = messages.length - 1;                                                  \n  while (i >= 0) {                                                              \n    const message = messages[i];                                                \n    if (message?.type === 'assistant' && 'usage' in message.message) {          \n      const { usage } = message.message;                                        \n      return {                                                                  \n        total:                                                                  \n          (usage.input_tokens || 0) +                                           \n          (usage.cache_creation_input_tokens || 0) +                            \n          (usage.cache_read_input_tokens || 0) +                                \n          (usage.output_tokens || 0),                                           \n        cached:                                                                 \n          (usage.cache_creation_input_tokens || 0) +                            \n          (usage.cache_read_input_tokens || 0),                                 \n        input: usage.input_tokens || 0,                                         \n        output: usage.output_tokens || 0,                                       \n      };                                                                        \n    }                                                                           \n    i--;                                                                        \n  }                                                                             \n  return { total: 0, cached: 0, input: 0, output: 0 };                          \n}"
+        },
+        {
+          "role": "assistant",
+          "tool_calls": [
+            {
+              "id": "5d2fd93d9",
+              "type": "function",
+              "function": {
+                "name": "Bash",
+                "arguments": "{\"command\":\"head -50 core/tokens.ts\"}"
+              }
+            }
+          ],
+          "content": "Let's check the full content of tokens.ts to understand its complete functionality:"
+        },
+        {
+          "role": "tool",
+          "tool_call_id": "5d2fd93d9",
+          "content": "const { usage } = message.message;                                        \n      // Total tokens = input + cache creation + cache read + output            \n      return (                                                                  \n        (usage.input_tokens || 0) +                                             \n        (usage.cache_creation_input_tokens || 0) +                              \n        (usage.cache_read_input_tokens || 0) +                                  \n        (usage.output_tokens || 0)                                              \n      );                                                                        \n    }                                                                           \n    i--;                                                                        \n  }                                                                             \n  return 0;                                                                     \n}                                                                               \n                                                                                \n/**                                                                             \n * Count only cached tokens (cache creation + cache read)                       \n */                                                                             \nexport function countCachedTokens(messages: Message[]): number {                \n  let i = messages.length - 1;                                                  \n  while (i >= 0) {                                                              \n    const message = messages[i];                                                \n    if (message?.type === 'assistant' && 'usage' in message.message) {          \n      const { usage } = message.message;                                        \n      return (                                                                  \n        (usage.cache_creation_input_tokens || 0) +                              \n        (usage.cache_read_input_tokens || 0)                                    \n      );                                                                        \n    }                                                                           \n    i--;"
+        },
+        {
+          "role": "assistant",
+          "tool_calls": [
+            {
+              "id": "566d20ad4",
+              "type": "function",
+              "function": {
+                "name": "Bash",
+                "arguments": "{\"command\":\"cat core/tokens.ts\"}"
+              }
+            }
+          ],
+          "content": "Let's get the complete tokens.ts file:"
+        },
+        {
+          "role": "tool",
+          "tool_call_id": "566d20ad4",
+          "content": "*/                                                                             \nexport function getTokenStats(messages: Message[]): {                           \n  total: number;                                                                \n  cached: number;                                                               \n  input: number;                                                                \n  output: number;                                                               \n} {                                                                             \n  let i = messages.length - 1;                                                  \n  while (i >= 0) {                                                              \n    const message = messages[i];                                                \n    if (message?.type === 'assistant' && 'usage' in message.message) {          \n      const { usage } = message.message;                                        \n      return {                                                                  \n        total:                                                                  \n          (usage.input_tokens || 0) +                                           \n          (usage.cache_creation_input_tokens || 0) +                            \n          (usage.cache_read_input_tokens || 0) +                                \n          (usage.output_tokens || 0),                                           \n        cached:                                                                 \n          (usage.cache_creation_input_tokens || 0) +                            \n          (usage.cache_read_input_tokens || 0),                                 \n        input: usage.input_tokens || 0,                                         \n        output: usage.output_tokens || 0,                                       \n      };                                                                        \n    }                                                                           \n    i--;                                                                        \n  }                                                                             \n  return { total: 0, cached: 0, input: 0, output: 0 };                          \n}"
+        },
+        {
+          "role": "assistant",
+          "tool_calls": [
+            {
+              "id": "9b7fa709a",
+              "type": "function",
+              "function": {
+                "name": "Grep",
+                "arguments": "{\"pattern\":\"ToolUseBlock\",\"path\":\".\",\"include\":\"*.ts\"}"
+              }
+            }
+          ],
+          "content": "Let's check if there are any other files that might contain token counting logic or references to ToolUseBlock:"
+        },
+        {
+          "role": "tool",
+          "tool_call_id": "9b7fa709a",
+          "content": "Found 6 files\n/home/alejandro/Swarm/ceregrep-client/core/agent.ts\n/home/alejandro/Swarm/ceregrep-client/core/messages.ts\n/home/alejandro/Swarm/ceregrep-client/cli/stream-renderer.ts\n/home/alejandro/Swarm/ceregrep-client/index.ts\n/home/alejandro/Swarm/ceregrep-client/claude-code-template/components/binary-feedback/utils.ts\n/home/alejandro/Swarm/ceregrep-client/claude-code-template/query.ts"
+        },
+        {
+          "role": "assistant",
+          "tool_calls": [
+            {
+              "id": "1e85c3da8",
+              "type": "function",
+              "function": {
+                "name": "Bash",
+                "arguments": "{\"command\":\"grep -n -A 5 -B 5 ToolUseBlock core/agent.ts\"}"
+              }
+            }
+          ],
+          "content": "Let's examine how ToolUseBlock is used in agent.ts:"
+        },
+        {
+          "role": "tool",
+          "tool_call_id": "1e85c3da8",
+          "content": "17-  INTERRUPT_MESSAGE,                                                         \n18-  INTERRUPT_MESSAGE_FOR_TOOL_USE,                                            \n19-} from './messages.js';                                                      \n20-import { countTokens, shouldCompact } from './tokens.js';                    \n21-import { executePreToolUseHooks, executePostToolUseHooks } from './hooks.js';\n--                                                                              \n94-  }                                                                          \n95-                                                                             \n96-  yield assistantMessage;                                                    \n97-                                                                             \n98-  // Extract tool use blocks                                                 \n99:  const toolUseMessages = extractToolUseBlocks(assistantMessage);            \n100-                                                                            \n101-  if (toolUseContext.options.debug) {                                       \n102-    console.log('[AGENT] Tool use blocks found:', toolUseMessages.length);  \n103-    toolUseMessages.forEach(tu => console.log('  -', tu.name));             \n104-  }                                                                         \n--                                                                              \n160-                                                                            \n161-/**                                                                         \n162- * Execute tools serially (one at a time)                                   \n163- */                                                                         \n164-async function* runToolsSerially(                                           \n165:  toolUseMessages: ToolUseBlock[],                                          \n166-  assistantMessage: AssistantMessage,                                       \n167-  canUseTool: CanUseToolFn,                                                 \n168-  toolUseContext: ToolContext,                                              \n169-  shouldSkipPermissionCheck: boolean,                                       \n170-): AsyncGenerator<Message, void> {"
+        }
+      ],
+      "temperature": 0.7,
+      "top_p": 0.8,
+      "tools": [
+        {
+          "type": "function",
+          "function": {
+            "name": "Bash",
+            "description": "Tool: Bash",
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "command": {
+                  "type": "string",
+                  "description": "The command to execute"
+                },
+                "timeout": {
+                  "type": "number",
+                  "description": "Optional timeout in milliseconds (max 600000)"
+                }
+              },
+              "required": [
+                "command"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        {
+          "type": "function",
+          "function": {
+            "name": "Grep",
+            "description": "Tool: Grep",
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "pattern": {
+                  "type": "string",
+                  "description": "The regular expression pattern to search for in file contents"
+                },
+                "path": {
+                  "type": "string",
+                  "description": "The directory to search in. Defaults to the current working directory."
+                },
+                "include": {
+                  "type": "string",
+                  "description": "File pattern to include in the search (e.g. \"*.ts\", \"*.{ts,tsx}\")"
+                }
+              },
+              "required": [
+                "pattern"
+              ],
+              "additionalProperties": false
+            }
+          }
+        }
+      ],
+      "tool_choice": "auto"
+    },
+    "bodySize": 17169
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "date": "Fri, 24 Oct 2025 18:51:54 GMT",
+      "content-type": "application/json",
+      "transfer-encoding": "chunked",
+      "connection": "keep-alive",
+      "server": "cloudflare",
+      "x-request-id": "993bab10591041bf-ATL",
+      "x-ratelimit-limit-requests-day": "172800",
+      "x-ratelimit-limit-tokens-minute": "1500000",
+      "x-ratelimit-remaining-requests-day": "170676",
+      "x-ratelimit-remaining-tokens-minute": "1295740",
+      "x-ratelimit-reset-requests-day": "18485.32425737381",
+      "x-ratelimit-reset-tokens-minute": "5.3242573738098145",
+      "inference-id": "chatcmpl-999a5831-461f-445f-81b1-517df0598271",
+      "referrer-policy": "strict-origin-when-cross-origin",
+      "x-content-type-options": "nosniff",
+      "strict-transport-security": "max-age=3600; includeSubDomains",
+      "cf-cache-status": "DYNAMIC",
+      "set-cookie": "__cf_bm=DFfSyvVg7CnAmFszVp2vLyjvJAHwp20Ek4E0hd54n0o-1761331914.3009737-1.0.1.1-scAfXmqig4YYv0Izh74Bq2ibRwstd0Q25T6DbGjul7ZW0ylBrRtU3FWixV8B5BkNsmk1HUjO_eNiziYAHQWAiqPrlKCBr3PLeF5HUdIBaixy4NgjtFoqEIuaM1VZCziS; HttpOnly; Secure; Path=/; Expires=Fri, 24 Oct 2025 19:21:54 GMT",
+      "cf-ray": "993bab10591041bf-ATL",
+      "alt-svc": "h3=\":443\"; ma=86400"
+    },
+    "body": {
+      "id": "chatcmpl-999a5831-461f-445f-81b1-517df0598271",
+      "choices": [
+        {
+          "finish_reason": "tool_calls",
+          "index": 0,
+          "message": {
+            "content": "Let's look at the extractToolUseBlocks function:\n\n",
+            "tool_calls": [
+              {
+                "id": "1b676af9d",
+                "type": "function",
+                "function": {
+                  "name": "Grep",
+                  "arguments": "{\"pattern\": \"extractToolUseBlocks\", \"path\": \"core/\", \"include\": \"*.ts\"}"
+                }
+              }
+            ],
+            "role": "assistant"
+          }
+        }
+      ],
+      "created": 1761331914,
+      "model": "qwen-3-coder-480b",
+      "system_fingerprint": "fp_386b539e7b02ce3613b7",
+      "object": "chat.completion",
+      "usage": {
+        "prompt_tokens": 2679,
+        "completion_tokens": 56,
+        "total_tokens": 2735,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        }
+      },
+      "time_info": {
+        "queue_time": 0.002234628,
+        "prompt_time": 0.098061222,
+        "completion_time": 0.090434467,
+        "total_time": 0.19219422340393066,
+        "created": 1761331914.440406
+      }
+    },
+    "duration": 589
+  }
+}

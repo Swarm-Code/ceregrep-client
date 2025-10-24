@@ -1,0 +1,251 @@
+{
+  "request": {
+    "requestId": "1df486fa-0574-4c5e-a609-96b2c48f8a87",
+    "requestNumber": 221,
+    "timestamp": "2025-10-24T18:53:09.454Z",
+    "method": "POST",
+    "path": "/v1/chat/completions",
+    "headers": {
+      "content-length": "14148",
+      "accept": "application/json",
+      "content-type": "application/json",
+      "user-agent": "OpenAI/JS 4.104.0",
+      "x-stainless-lang": "js",
+      "x-stainless-package-version": "4.104.0",
+      "x-stainless-os": "Linux",
+      "x-stainless-arch": "x64",
+      "x-stainless-runtime": "node",
+      "x-stainless-runtime-version": "v24.9.0",
+      "authorization": "Bearer csk-f3e6y5t8ppf6h565dhpj3end2n82tdr95pp65m3xtx9vvnmc",
+      "x-stainless-retry-count": "0",
+      "x-stainless-timeout": "15",
+      "accept-encoding": "gzip,deflate",
+      "host": "localhost:8080",
+      "connection": "keep-alive"
+    },
+    "body": {
+      "model": "qwen-3-coder-480b",
+      "messages": [
+        {
+          "role": "system",
+          "content": "You are a helpful AI assistant with access to bash and file search tools.\n\nUse the tools available to help the user accomplish their tasks.\n\n\n\nCRITICAL INSTRUCTION - CONTEXT AND EXPLANATION REQUIREMENTS:\n\n- Give as much context as possible in your responses. It is ALWAYS better to add too much context than too little.\n\n- Use file references with line numbers in the format: filename.ts:123 or path/to/file.py:456\n\n- Explain everything in an ultra explanatory tone, assuming the user needs complete understanding.\n\n- Include specific details: function names, variable names, code snippets, file paths with line numbers.\n\n- When referencing code, ALWAYS include the file path and line number where it can be found.\n\n- Provide thorough explanations of how things work, why they work that way, and what each piece does.\n\n- Word for word: \"Better to add too much context than necessary\" - follow this principle strictly.\n\n\n\nCRITICAL INSTRUCTION - MUST USE TOOLS TO GATHER INFORMATION:\n\n- You MUST use grep to search for information before answering questions about code.\n\n- You CANNOT rely on stored context or prior knowledge about the codebase.\n\n- Everything must be read using tools before giving an explanation.\n\n- This is to ensure that you do not lazily answer questions without verifying current state.\n\n- Always grep for relevant files, read the actual code, and then provide your explanation.\n\n- Never answer based solely on assumptions or memory - always verify with tools first."
+        },
+        {
+          "role": "user",
+          "content": "Previous conversation context:\n\n- User asked: Analyze the complete architecture of the system → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Grep → Assistant used tools: Grep → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Grep → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Grep → Assistant used tools: Bash → Assistant used tools: Grep → Assistant used tools: Bash → Assistant used tools: Grep → Assistant used tools: Grep → Assistant used tools: Grep → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Grep → Assistant used tools: Bash → Assistant used tools: Grep → Assistant used tools: Bash → Assistant used tools: Grep → Assistant used tools: Grep → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Grep → Assistant used tools: Bash → Assistant used tools: Bash\n\n[Conversation compacted. Continuing from recent context:]"
+        },
+        {
+          "role": "assistant",
+          "tool_calls": [
+            {
+              "id": "d07b619da",
+              "type": "function",
+              "function": {
+                "name": "Bash",
+                "arguments": "{\"command\":\"npm view @anthropic-ai/sdk types\"}"
+              }
+            }
+          ],
+          "content": "Let's check the Anthropic SDK documentation or types to understand ToolUseBlock:"
+        },
+        {
+          "role": "tool",
+          "tool_call_id": "d07b619da",
+          "content": "./index.d.ts"
+        },
+        {
+          "role": "assistant",
+          "tool_calls": [
+            {
+              "id": "db8272654",
+              "type": "function",
+              "function": {
+                "name": "Bash",
+                "arguments": "{\"command\":\"node -e \\\"import('@anthropic-ai/sdk/resources/index.mjs').then(module => console.log(Object.keys(module)))\\\"\"}"
+              }
+            }
+          ],
+          "content": "Let's look at the Anthropic SDK types to understand ToolUseBlock:"
+        },
+        {
+          "role": "tool",
+          "tool_call_id": "db8272654",
+          "content": "[ 'Beta', 'Completions', 'Messages', 'Models' ]"
+        },
+        {
+          "role": "assistant",
+          "tool_calls": [
+            {
+              "id": "b72c716c1",
+              "type": "function",
+              "function": {
+                "name": "Bash",
+                "arguments": "{\"command\":\"find node_modules/@anthropic-ai/sdk -name \\\"*.d.ts\\\" -exec grep -l \\\"ToolUseBlock\\\" {} \\\\;\"}"
+              }
+            }
+          ],
+          "content": "Let's check if we can find the ToolUseBlock type definition in the node_modules:"
+        },
+        {
+          "role": "tool",
+          "tool_call_id": "b72c716c1",
+          "content": "node_modules/@anthropic-ai/sdk/client.d.ts                                      \nnode_modules/@anthropic-ai/sdk/lib/BetaMessageStream.d.ts                       \nnode_modules/@anthropic-ai/sdk/lib/MessageStream.d.ts                           \nnode_modules/@anthropic-ai/sdk/resources/index.d.ts                             \nnode_modules/@anthropic-ai/sdk/resources/beta/beta.d.ts                         \nnode_modules/@anthropic-ai/sdk/resources/beta/index.d.ts                        \nnode_modules/@anthropic-ai/sdk/resources/beta/messages/index.d.ts               \nnode_modules/@anthropic-ai/sdk/resources/beta/messages/messages.d.ts            \nnode_modules/@anthropic-ai/sdk/resources/messages/index.d.ts                    \nnode_modules/@anthropic-ai/sdk/resources/messages/messages.d.ts"
+        },
+        {
+          "role": "assistant",
+          "tool_calls": [
+            {
+              "id": "57f3ff605",
+              "type": "function",
+              "function": {
+                "name": "Bash",
+                "arguments": "{\"command\":\"grep -n -A 10 -B 5 \\\"ToolUseBlock\\\" node_modules/@anthropic-ai/sdk/resources/messages/messages.d.ts\"}"
+              }
+            }
+          ],
+          "content": "Let's examine the ToolUseBlock definition in the messages.d.ts file:"
+        },
+        {
+          "role": "tool",
+          "tool_call_id": "57f3ff605",
+          "content": "aUsage as MessageDeltaUsage, type MessageParam as MessageParam, type MessageToke\nnsCount as MessageTokensCount, type Metadata as Metadata, type Model as Model, t\nype PlainTextSource as PlainTextSource, type RawContentBlockDelta as RawContentB\nlockDelta, type RawContentBlockDeltaEvent as RawContentBlockDeltaEvent, type Raw\nContentBlockStartEvent as RawContentBlockStartEvent, type RawContentBlockStopEve\nnt as RawContentBlockStopEvent, type RawMessageDeltaEvent as RawMessageDeltaEven\nt, type RawMessageStartEvent as RawMessageStartEvent, type RawMessageStopEvent a\ns RawMessageStopEvent, type RawMessageStreamEvent as RawMessageStreamEvent, type\n RedactedThinkingBlock as RedactedThinkingBlock, type RedactedThinkingBlockParam\n as RedactedThinkingBlockParam, type SearchResultBlockParam as SearchResultBlock\nParam, type ServerToolUsage as ServerToolUsage, type ServerToolUseBlock as Serve\nrToolUseBlock, type ServerToolUseBlockParam as ServerToolUseBlockParam, type Sig\nnatureDelta as SignatureDelta, type StopReason as StopReason, type TextBlock as \nTextBlock, type TextBlockParam as TextBlockParam, type TextCitation as TextCitat\nion, type TextCitationParam as TextCitationParam, type TextDelta as TextDelta, t\nype ThinkingBlock as ThinkingBlock, type ThinkingBlockParam as ThinkingBlockPara\nm, type ThinkingConfigDisabled as ThinkingConfigDisabled, type ThinkingConfigEna\nbled as ThinkingConfigEnabled, type ThinkingConfigParam as ThinkingConfigParam, \ntype ThinkingDelta as ThinkingDelta, type Tool as Tool, type ToolBash20250124 as\n ToolBash20250124, type ToolChoice as ToolChoice, type ToolChoiceAny as ToolChoi\nceAny, type ToolChoiceAuto as ToolChoiceAuto, type ToolChoiceNone as ToolChoiceN\none, type ToolChoiceTool as ToolChoiceTool, type ToolResultBlockParam as ToolRes\nultBlockParam, type ToolTextEditor20250124 as ToolTextEditor20250124, type ToolT\nextEditor20250429 as ToolTextEditor20250429, type ToolTextEditor20250728 as Tool\nTextEditor20250728, type ToolUnion as ToolUnion, type ToolUseBlock as ToolUseBlo\nck, type ToolUseBlockParam as ToolUseBlockParam, type URLImageSource as URLImage\nSource, type URLPDFSource as URLPDFSource, type Usage as Usage, type WebSearchRe\nsultBlock as WebSearchResultBlock, type WebSearchResultBlockParam as WebSearchRe\nsultBlockParam, type WebSearchTool20250305 as WebSearchTool20250305, type WebSea\nrchToolRequestError as WebSearchToolRequestError,"
+        },
+        {
+          "role": "assistant",
+          "tool_calls": [
+            {
+              "id": "0fae9a8ec",
+              "type": "function",
+              "function": {
+                "name": "Bash",
+                "arguments": "{\"command\":\"grep -n -A 20 \\\"export interface ToolUseBlock\\\" node_modules/@anthropic-ai/sdk/resources/messages/messages.d.ts\"}"
+              }
+            }
+          ],
+          "content": "Let's get the specific definition of ToolUseBlock:"
+        },
+        {
+          "role": "tool",
+          "tool_call_id": "0fae9a8ec",
+          "content": "705:export interface ToolUseBlock {                                             \n706-    id: string;                                                             \n707-    input: unknown;                                                         \n708-    name: string;                                                           \n709-    type: 'tool_use';                                                       \n710-}                                                                           \n711:export interface ToolUseBlockParam {                                        \n712-    id: string;                                                             \n713-    input: unknown;                                                         \n714-    name: string;                                                           \n715-    type: 'tool_use';                                                       \n716-    /**                                                                     \n717-     * Create a cache control breakpoint at this content block.             \n718-     */                                                                     \n719-    cache_control?: CacheControlEphemeral | null;                           \n720-}                                                                           \n721-export interface URLImageSource {                                           \n722-    type: 'url';                                                            \n723-    url: string;                                                            \n724-}                                                                           \n725-export interface URLPDFSource {                                             \n726-    type: 'url';                                                            \n727-    url: string;                                                            \n728-}                                                                           \n729-export interface Usage {                                                    \n730-    /**                                                                     \n731-     * Breakdown of cached tokens by TTL"
+        }
+      ],
+      "temperature": 0.7,
+      "top_p": 0.8,
+      "tools": [
+        {
+          "type": "function",
+          "function": {
+            "name": "Bash",
+            "description": "Tool: Bash",
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "command": {
+                  "type": "string",
+                  "description": "The command to execute"
+                },
+                "timeout": {
+                  "type": "number",
+                  "description": "Optional timeout in milliseconds (max 600000)"
+                }
+              },
+              "required": [
+                "command"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        {
+          "type": "function",
+          "function": {
+            "name": "Grep",
+            "description": "Tool: Grep",
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "pattern": {
+                  "type": "string",
+                  "description": "The regular expression pattern to search for in file contents"
+                },
+                "path": {
+                  "type": "string",
+                  "description": "The directory to search in. Defaults to the current working directory."
+                },
+                "include": {
+                  "type": "string",
+                  "description": "File pattern to include in the search (e.g. \"*.ts\", \"*.{ts,tsx}\")"
+                }
+              },
+              "required": [
+                "pattern"
+              ],
+              "additionalProperties": false
+            }
+          }
+        }
+      ],
+      "tool_choice": "auto"
+    },
+    "bodySize": 13976
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "date": "Fri, 24 Oct 2025 18:53:10 GMT",
+      "content-type": "application/json",
+      "transfer-encoding": "chunked",
+      "connection": "keep-alive",
+      "server": "cloudflare",
+      "x-request-id": "993bace6eb19a38b-ATL",
+      "x-ratelimit-limit-requests-day": "172800",
+      "x-ratelimit-limit-tokens-minute": "1500000",
+      "x-ratelimit-remaining-requests-day": "170650",
+      "x-ratelimit-remaining-tokens-minute": "1478840",
+      "x-ratelimit-reset-requests-day": "18409.803797483444",
+      "x-ratelimit-reset-tokens-minute": "49.803797483444214",
+      "inference-id": "chatcmpl-5f5c175c-d190-4878-8c7e-cfde5aa12f02",
+      "referrer-policy": "strict-origin-when-cross-origin",
+      "x-content-type-options": "nosniff",
+      "strict-transport-security": "max-age=3600; includeSubDomains",
+      "cf-cache-status": "DYNAMIC",
+      "set-cookie": "__cf_bm=3bZXnALsciuH1D_W5KWD8QhvQ6GOTNaxTwVKCPtHmdI-1761331989.5879905-1.0.1.1-bwWwmz4pyDLD6ziU0_6lEm5gv.4mmohamcFS1WGHSx9xAY0kO4GVbDbm.uVp7agCgzyoAOtvCC0CfUdeY9rgDIdZoqHc27hvI8hFfbzCWAOEjpyYNBkJKU5mFUDrxxI6; HttpOnly; Secure; Path=/; Expires=Fri, 24 Oct 2025 19:23:10 GMT",
+      "cf-ray": "993bace6eb19a38b-ATL",
+      "alt-svc": "h3=\":443\"; ma=86400"
+    },
+    "body": {
+      "id": "chatcmpl-5f5c175c-d190-4878-8c7e-cfde5aa12f02",
+      "choices": [
+        {
+          "finish_reason": "stop",
+          "index": 0,
+          "message": {
+            "content": "Now I have a clear understanding of the ToolUseBlock interface from the Anthropic SDK. Let me explain it in detail:\n\n## ToolUseBlock Interface Definition\n\nThe ToolUseBlock is defined in the Anthropic SDK as follows:\n\n```typescript\nexport interface ToolUseBlock {\n    id: string;      // Line 706 in node_modules/@anthropic-ai/sdk/resources/messages/messages.d.ts\n    input: unknown;  // Line 707\n    name: string;    // Line 708\n    type: 'tool_use'; // Line 709\n}\n```\n\n## Detailed Explanation\n\n1. **id (string)** - This is a unique identifier for the tool use block. Each time Claude decides to use a tool, it gets assigned a unique ID that can be used to track this specific tool usage instance.\n\n2. **input (unknown)** - This represents the parameters that Claude wants to pass to the tool. It's typed as `unknown` because the structure can vary completely depending on what tool is being called and what parameters that tool accepts. For example:\n   - For a calculator tool, it might be `{ expression: \"2+2\" }`\n   - For a weather tool, it might be `{ location: \"New York\", date: \"2024-01-01\" }`\n\n3. **name (string)** - This is the name of the tool that Claude wants to use. It corresponds to the tool names you define when setting up the tools for Claude to use.\n\n4. **type ('tool_use')** - This is a literal type that identifies this object as a tool use block, distinguishing it from other types of content blocks like text blocks or tool result blocks.\n\n## Context and Usage\n\nWhen Claude processes a message and determines that he needs to use a tool to fulfill the user's request, he will include a ToolUseBlock in his response. This block contains all the information needed to execute the tool:\n\n- Which tool to use (name)\n- What parameters to pass to the tool (input)\n- A unique identifier for tracking this tool usage (id)\n\nThe ToolUseBlock is part of Claude's structured output when using tools. After your application executes the tool based on this block, you would typically send back a ToolResultBlock to Claude with the results of the tool execution.\n\nThis interface is part of the larger message structure that Claude uses to communicate with applications, allowing for complex workflows involving tool usage.",
+            "role": "assistant"
+          }
+        }
+      ],
+      "created": 1761331989,
+      "model": "qwen-3-coder-480b",
+      "system_fingerprint": "fp_386b539e7b02ce3613b7",
+      "object": "chat.completion",
+      "usage": {
+        "prompt_tokens": 2769,
+        "completion_tokens": 510,
+        "total_tokens": 3279,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        }
+      },
+      "time_info": {
+        "queue_time": 0.000119451,
+        "prompt_time": 0.047130394,
+        "completion_time": 0.430499229,
+        "total_time": 0.4791693687438965,
+        "created": 1761331989.679266
+      }
+    },
+    "duration": 920
+  }
+}

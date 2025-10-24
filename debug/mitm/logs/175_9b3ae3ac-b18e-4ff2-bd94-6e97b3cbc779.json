@@ -1,0 +1,261 @@
+{
+  "request": {
+    "requestId": "9b3ae3ac-b18e-4ff2-bd94-6e97b3cbc779",
+    "requestNumber": 175,
+    "timestamp": "2025-10-24T18:51:45.946Z",
+    "method": "POST",
+    "path": "/v1/chat/completions",
+    "headers": {
+      "content-length": "8666",
+      "accept": "application/json",
+      "content-type": "application/json",
+      "user-agent": "OpenAI/JS 4.104.0",
+      "x-stainless-lang": "js",
+      "x-stainless-package-version": "4.104.0",
+      "x-stainless-os": "Linux",
+      "x-stainless-arch": "x64",
+      "x-stainless-runtime": "node",
+      "x-stainless-runtime-version": "v24.9.0",
+      "authorization": "Bearer csk-f3e6y5t8ppf6h565dhpj3end2n82tdr95pp65m3xtx9vvnmc",
+      "x-stainless-retry-count": "0",
+      "x-stainless-timeout": "15",
+      "accept-encoding": "gzip,deflate",
+      "host": "localhost:8080",
+      "connection": "keep-alive"
+    },
+    "body": {
+      "model": "qwen-3-coder-480b",
+      "messages": [
+        {
+          "role": "system",
+          "content": "You are a helpful AI assistant with access to bash and file search tools.\n\nUse the tools available to help the user accomplish their tasks.\n\n\n\nCRITICAL INSTRUCTION - CONTEXT AND EXPLANATION REQUIREMENTS:\n\n- Give as much context as possible in your responses. It is ALWAYS better to add too much context than too little.\n\n- Use file references with line numbers in the format: filename.ts:123 or path/to/file.py:456\n\n- Explain everything in an ultra explanatory tone, assuming the user needs complete understanding.\n\n- Include specific details: function names, variable names, code snippets, file paths with line numbers.\n\n- When referencing code, ALWAYS include the file path and line number where it can be found.\n\n- Provide thorough explanations of how things work, why they work that way, and what each piece does.\n\n- Word for word: \"Better to add too much context than necessary\" - follow this principle strictly.\n\n\n\nCRITICAL INSTRUCTION - MUST USE TOOLS TO GATHER INFORMATION:\n\n- You MUST use grep to search for information before answering questions about code.\n\n- You CANNOT rely on stored context or prior knowledge about the codebase.\n\n- Everything must be read using tools before giving an explanation.\n\n- This is to ensure that you do not lazily answer questions without verifying current state.\n\n- Always grep for relevant files, read the actual code, and then provide your explanation.\n\n- Never answer based solely on assumptions or memory - always verify with tools first."
+        },
+        {
+          "role": "user",
+          "content": "Previous conversation context:\n\n- User asked: Analyze the complete architecture of the system → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Grep → Assistant used tools: Grep → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Grep → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash\n\n[Conversation compacted. Continuing from recent context:]"
+        },
+        {
+          "role": "assistant",
+          "tool_calls": [
+            {
+              "id": "61857ad7c",
+              "type": "function",
+              "function": {
+                "name": "Bash",
+                "arguments": "{\"command\":\"grep -n \\\"extractToolUseBlocks\\\\|extractTextContent\\\" core/agent.ts\"}"
+              }
+            }
+          ],
+          "content": "Let's look at more of the agent.ts file to see how messages are processed:"
+        },
+        {
+          "role": "tool",
+          "tool_call_id": "61857ad7c",
+          "content": "16:  extractToolUseBlocks,                                                      \n99:  const toolUseMessages = extractToolUseBlocks(assistantMessage);"
+        },
+        {
+          "role": "assistant",
+          "tool_calls": [
+            {
+              "id": "2906a94c5",
+              "type": "function",
+              "function": {
+                "name": "Grep",
+                "arguments": "{\"pattern\":\"function extractToolUseBlocks\",\"path\":\"core/messages.ts\"}"
+              }
+            }
+          ],
+          "content": "Let's examine the extractToolUseBlocks function in messages.ts:"
+        },
+        {
+          "role": "tool",
+          "tool_call_id": "2906a94c5",
+          "content": "Found 1 file\n/home/alejandro/Swarm/ceregrep-client/core/messages.ts"
+        },
+        {
+          "role": "assistant",
+          "tool_calls": [
+            {
+              "id": "0376db8d1",
+              "type": "function",
+              "function": {
+                "name": "Bash",
+                "arguments": "{\"command\":\"grep -A 20 \\\"function extractToolUseBlocks\\\" core/messages.ts\"}"
+              }
+            }
+          ],
+          "content": "Let's see the actual content of the extractToolUseBlocks function:"
+        },
+        {
+          "role": "tool",
+          "tool_call_id": "0376db8d1",
+          "content": "export function extractToolUseBlocks(message: AssistantMessage): ToolUseBlock[] \n{                                                                               \n  return [                                                                      \n    ...(message.message.content?.filter(_ => _.type === 'tool_use') || []),     \n    ...(message.message.tool_use || []),                                        \n  ] as ToolUseBlock[];                                                          \n}                                                                               \n                                                                                \n/**                                                                             \n * Extract text content from assistant message                                  \n */                                                                             \nexport function extractTextContent(message: AssistantMessage): string {         \n  return message.message.content                                                \n    .filter(c => c.type === 'text')                                             \n    .map(c => (c as any).text)                                                  \n    .join(' ');                                                                 \n}"
+        },
+        {
+          "role": "assistant",
+          "tool_calls": [
+            {
+              "id": "e5869c11f",
+              "type": "function",
+              "function": {
+                "name": "Grep",
+                "arguments": "{\"pattern\":\"ToolUseBlock\",\"path\":\"core/messages.ts\"}"
+              }
+            }
+          ],
+          "content": "Now let's check the ToolUseBlock type definition:"
+        },
+        {
+          "role": "tool",
+          "tool_call_id": "e5869c11f",
+          "content": "Found 1 file\n/home/alejandro/Swarm/ceregrep-client/core/messages.ts"
+        },
+        {
+          "role": "assistant",
+          "tool_calls": [
+            {
+              "id": "f1ed89ae1",
+              "type": "function",
+              "function": {
+                "name": "Bash",
+                "arguments": "{\"command\":\"grep -B 5 -A 10 \\\"interface ToolUseBlock\\\" core/messages.ts\"}"
+              }
+            }
+          ],
+          "content": "Let's see the ToolUseBlock interface definition:"
+        },
+        {
+          "role": "tool",
+          "tool_call_id": "f1ed89ae1",
+          "content": "Exit code 1"
+        }
+      ],
+      "temperature": 0.7,
+      "top_p": 0.8,
+      "tools": [
+        {
+          "type": "function",
+          "function": {
+            "name": "Bash",
+            "description": "Tool: Bash",
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "command": {
+                  "type": "string",
+                  "description": "The command to execute"
+                },
+                "timeout": {
+                  "type": "number",
+                  "description": "Optional timeout in milliseconds (max 600000)"
+                }
+              },
+              "required": [
+                "command"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        {
+          "type": "function",
+          "function": {
+            "name": "Grep",
+            "description": "Tool: Grep",
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "pattern": {
+                  "type": "string",
+                  "description": "The regular expression pattern to search for in file contents"
+                },
+                "path": {
+                  "type": "string",
+                  "description": "The directory to search in. Defaults to the current working directory."
+                },
+                "include": {
+                  "type": "string",
+                  "description": "File pattern to include in the search (e.g. \"*.ts\", \"*.{ts,tsx}\")"
+                }
+              },
+              "required": [
+                "pattern"
+              ],
+              "additionalProperties": false
+            }
+          }
+        }
+      ],
+      "tool_choice": "auto"
+    },
+    "bodySize": 8586
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "date": "Fri, 24 Oct 2025 18:51:46 GMT",
+      "content-type": "application/json",
+      "transfer-encoding": "chunked",
+      "connection": "keep-alive",
+      "server": "cloudflare",
+      "x-request-id": "993baadc7c5e41bf-ATL",
+      "x-ratelimit-limit-requests-day": "172800",
+      "x-ratelimit-limit-tokens-minute": "1500000",
+      "x-ratelimit-remaining-requests-day": "170696",
+      "x-ratelimit-remaining-tokens-minute": "1336162",
+      "x-ratelimit-reset-requests-day": "18493.84086418152",
+      "x-ratelimit-reset-tokens-minute": "13.840864181518555",
+      "inference-id": "chatcmpl-5aed7fd7-5064-430d-a1b1-757fb89b4af0",
+      "referrer-policy": "strict-origin-when-cross-origin",
+      "x-content-type-options": "nosniff",
+      "strict-transport-security": "max-age=3600; includeSubDomains",
+      "cf-cache-status": "DYNAMIC",
+      "set-cookie": "__cf_bm=d4vI8cAOEZZh3UpnEL50ULoXodDM2x5Ba56ZEtpwasE-1761331905.9959326-1.0.1.1-i__irA36iJoY_zJOAoRwe4EcXF73wQKisJPtbexC8RLpYws6Qb59kwroS7YyvxvXvvzdyL42qHsJuF8okhVPp32L1xHW3SZ.BixIjIUefQNX2aBQ29Klqsb5hW_dK2ka; HttpOnly; Secure; Path=/; Expires=Fri, 24 Oct 2025 19:21:46 GMT",
+      "cf-ray": "993baadc7c5e41bf-ATL",
+      "alt-svc": "h3=\":443\"; ma=86400"
+    },
+    "body": {
+      "id": "chatcmpl-5aed7fd7-5064-430d-a1b1-757fb89b4af0",
+      "choices": [
+        {
+          "finish_reason": "tool_calls",
+          "index": 0,
+          "message": {
+            "content": "Let's search for the ToolUseBlock type definition more broadly:\n\n",
+            "tool_calls": [
+              {
+                "id": "ce705579c",
+                "type": "function",
+                "function": {
+                  "name": "Grep",
+                  "arguments": "{\"pattern\": \"type ToolUseBlock\", \"path\": \".\"}"
+                }
+              }
+            ],
+            "role": "assistant"
+          }
+        }
+      ],
+      "created": 1761331906,
+      "model": "qwen-3-coder-480b",
+      "system_fingerprint": "fp_386b539e7b02ce3613b7",
+      "object": "chat.completion",
+      "usage": {
+        "prompt_tokens": 1549,
+        "completion_tokens": 46,
+        "total_tokens": 1595,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        }
+      },
+      "time_info": {
+        "queue_time": 0.000765547,
+        "prompt_time": 0.024701428,
+        "completion_time": 0.022764599,
+        "total_time": 0.04987978935241699,
+        "created": 1761331906.0753527
+      }
+    },
+    "duration": 283
+  }
+}
