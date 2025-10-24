@@ -15,6 +15,7 @@ const { version } = require('../../package.json');
 import { PersistentShell } from '../utils/shell.js';
 import { StreamRenderer } from './stream-renderer.js';
 import { getTokenStats } from '../core/tokens.js';
+import { Message } from '../core/messages.js';
 import {
   listMCPServers,
   testMCPServer,
@@ -116,8 +117,12 @@ program
 
       renderer.startQuery();
 
+      // Collect all messages for token stats (SDK is now stateless)
+      const allMessages: Message[] = [];
+
       // Stream messages in real-time
-      for await (const message of client.queryStream(prompt, {
+      // Pass empty message history since CLI is single-query
+      for await (const message of client.queryStream([], prompt, {
         verbose: options.verbose,
         debug: options.debug,
         enableThinking: configOverrides.enableThinking,
@@ -125,11 +130,11 @@ program
         maxThinkingTokens: configOverrides.maxThinkingTokens,
       })) {
         renderer.handleMessage(message);
+        allMessages.push(message);
       }
 
-      // Get final token stats
-      const history = client.getHistory();
-      const stats = getTokenStats(history);
+      // Get final token stats from collected messages
+      const stats = getTokenStats(allMessages);
 
       // Finish rendering
       renderer.finish();
@@ -674,17 +679,20 @@ program
 
       renderer.startQuery();
 
-      // Stream messages in real-time
-      for await (const message of client.queryStream(prompt, {
+      // Collect messages for stats
+      const allMessages: Message[] = [];
+
+      // Stream messages in real-time with stateless SDK
+      for await (const message of client.queryStream([], prompt, {
         systemPrompt: fullPrompt,
         debug: options.debug,
       })) {
         renderer.handleMessage(message);
+        allMessages.push(message);
       }
 
-      // Get final token stats
-      const history = client.getHistory();
-      const stats = getTokenStats(history);
+      // Get final token stats from collected messages
+      const stats = getTokenStats(allMessages);
 
       // Finish rendering
       renderer.finish();
