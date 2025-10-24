@@ -177,7 +177,7 @@ const MessageItemWithTools: React.FC<MessageItemProps> = ({ message, verboseMode
     return (
       <Box flexDirection="column" marginBottom={1} marginTop={1}>
         <Box marginBottom={0}>
-          <Text bold color={PURPLE}>◀ ASSISTANT</Text>
+          <Text bold color={PURPLE}>◀ 👾 SCOUT</Text>
         </Box>
 
         {/* Display text content */}

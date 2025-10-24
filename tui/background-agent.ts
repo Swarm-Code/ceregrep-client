@@ -31,7 +31,6 @@ export class BackgroundAgent {
     if (this.isInitialized) return;
 
     this.client = new CeregrepClient({
-      model: 'claude-sonnet-4-20250514',
       dangerouslySkipPermissions: true,
     });
 

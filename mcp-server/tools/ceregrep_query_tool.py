@@ -14,17 +14,17 @@ class CeregrepQueryTool(BaseTool):
 
     def __init__(self, ceregrep_bin_path: str = None):
         """Initialize the tool with path to ceregrep binary."""
-        self.ceregrep_bin = ceregrep_bin_path or "ceregrep"
+        self.ceregrep_bin = ceregrep_bin_path or "scout"
 
     @property
     def name(self) -> str:
-        return "ceregrep_query"
+        return "scout_query"
 
     @property
     def description(self) -> str:
         return (
-            "Query the ceregrep agent to find context in a codebase. "
-            "Ceregrep uses LLM-powered analysis with bash and grep tools to explore code, "
+            "Query the Scout agent to find context in a codebase. "
+            "Scout uses LLM-powered analysis with bash and grep tools to explore code, "
             "find patterns, analyze architecture, and provide detailed context. "
             "Use this when you need to understand code structure, find implementations, "
             "or gather context from files."
@@ -37,11 +37,11 @@ class CeregrepQueryTool(BaseTool):
             "properties": {
                 "query": {
                     "type": "string",
-                    "description": "Natural language query to ask ceregrep (e.g., 'Find all async functions', 'Explain the auth flow')"
+                    "description": "Natural language query to ask scout (e.g., 'Find all async functions', 'Explain the auth flow')"
                 },
                 "cwd": {
                     "type": "string",
-                    "description": "Working directory to run ceregrep in (optional, defaults to current directory)"
+                    "description": "Working directory to run scout in (optional, defaults to current directory)"
                 },
                 "model": {
                     "type": "string",
@@ -89,7 +89,7 @@ class CeregrepQueryTool(BaseTool):
                 error_msg = stderr.decode() if stderr else "Unknown error"
                 return [TextContent(
                     type="text",
-                    text=f"Ceregrep query failed: {error_msg}"
+                    text=f"Scout query failed: {error_msg}"
                 )]
 
             # Parse output
@@ -97,20 +97,20 @@ class CeregrepQueryTool(BaseTool):
 
             return [TextContent(
                 type="text",
-                text=f"## Ceregrep Query Result\n\n**Query:** {query}\n\n{output}"
+                text=f"## Scout Query Result\n\n**Query:** {query}\n\n{output}"
             )]
 
         except FileNotFoundError:
             return [TextContent(
                 type="text",
                 text=(
-                    "Error: ceregrep command not found. "
-                    "Make sure ceregrep is installed and in PATH. "
-                    "Run: npm link in the ceregrep-client directory to install globally."
+                    "Error: scout command not found. "
+                    "Make sure scout is installed and in PATH. "
+                    "Run: npm link in the scout-client directory to install globally."
                 )
             )]
         except Exception as e:
             return [TextContent(
                 type="text",
-                text=f"Error executing ceregrep: {str(e)}"
+                text=f"Error executing scout: {str(e)}"
             )]
