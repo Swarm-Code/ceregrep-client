@@ -1,10 +1,11 @@
 /**
  * Message List Component
  * Displays conversation messages with tool execution details
+ * PERFORMANCE OPTIMIZED: Uses Static component for old messages
  */
 
-import React from 'react';
-import { Box, Text } from 'ink';
+import React, { useMemo } from 'react';
+import { Box, Text, Static } from 'ink';
 import { Message, UserMessage, AssistantMessage } from '../../core/messages.js';
 import { extractTextContent, extractToolUseBlocks } from '../../core/messages.js';
 import { AnsiOutputText, isAnsiOutput } from './AnsiOutputText.js';
@@ -28,11 +29,13 @@ const COMPACT_MAX_LINES = 8;
 const VERBOSE_MAX_LINES = 50; // Even in verbose mode, cap at 50 lines
 const MAX_TEXT_LENGTH = 10000; // Max characters per text block
 
-export const MessageList: React.FC<MessageListProps> = ({ messages, isStreaming, verboseMode }) => {
-  // Build a map of tool executions: tool_use_id -> {name, input, output}
-  const toolExecutions = new Map<string, { name: string; input: any; output: string }>();
+// PERFORMANCE: Memoize component to prevent unnecessary re-renders
+export const MessageList = React.memo<MessageListProps>(({ messages, isStreaming, verboseMode }) => {
+  // PERFORMANCE: Memoize tool executions map
+  const toolExecutions = useMemo(() => {
+    const executions = new Map<string, { name: string; input: any; output: string }>();
 
-  messages.forEach((msg) => {
+    messages.forEach((msg) => {
     // Extract tool results from user messages (don't rely on toolUseResult flag)
     if (msg.type === 'user') {
       const content = msg.message.content;
@@ -41,7 +44,7 @@ export const MessageList: React.FC<MessageListProps> = ({ messages, isStreaming,
           if (block.type === 'tool_result') {
             const output = typeof block.content === 'string' ? block.content : JSON.stringify(block.content);
             // We'll fill in name and input when we process assistant messages
-            toolExecutions.set(block.tool_use_id, {
+            executions.set(block.tool_use_id, {
               name: '',
               input: null,
               output,
@@ -55,14 +58,17 @@ export const MessageList: React.FC<MessageListProps> = ({ messages, isStreaming,
       // Extract tool use blocks and link them with their results
       const toolUseBlocks = extractToolUseBlocks(msg);
       toolUseBlocks.forEach((block: any) => {
-        if (toolExecutions.has(block.id)) {
-          const existing = toolExecutions.get(block.id)!;
+        if (executions.has(block.id)) {
+          const existing = executions.get(block.id)!;
           existing.name = block.name;
           existing.input = block.input;
         }
       });
     }
   });
+
+    return executions;
+  }, [messages]); // Memoize based on messages
 
   // Filter messages for display
   const displayMessages = messages.filter(msg => {
@@ -133,7 +139,7 @@ export const MessageList: React.FC<MessageListProps> = ({ messages, isStreaming,
       )}
     </Box>
   );
-};
+}); // React.memo - end of MessageList component
 
 interface MessageItemProps {
   message: Message;

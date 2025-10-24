@@ -15,7 +15,8 @@ import { MCPManager } from './MCPManager.js';
 import { AgentManager } from './AgentManager.js';
 import { MessageNavigator } from './MessageNavigator.js';
 import { BranchSelector } from './BranchSelector.js';
-import { PromptSearch } from './PromptSearch.js';
+import { ShortcutBar } from './ShortcutBar.js';
+import { TooltipHints } from './TooltipHints.js';
 import { CeregrepClient } from '../../sdk/typescript/index.js';
 import { Message, createUserMessage, AssistantMessage } from '../../core/messages.js';
 import { getConfig, saveConfig } from '../../config/loader.js';
@@ -43,7 +44,7 @@ import { getModeSystemPrompt } from '../mode-prompts.js';
 import { getBackgroundAgent } from '../background-agent.js';
 import { loadHistory, savePrompt, PromptHistoryEntry } from '../prompt-history.js';
 
-type View = 'chat' | 'conversations' | 'agents' | 'config' | 'mcp' | 'branches' | 'promptSearch';
+type View = 'chat' | 'conversations' | 'agents' | 'config' | 'mcp' | 'branches';
 type AgentMode = 'PLAN' | 'ACT' | 'DEBUG';
 
 interface AppProps {
@@ -347,11 +348,7 @@ export const App: React.FC<AppProps> = ({ initialConversationId, initialAgentId,
       return; // Prevent 't' from being added to input
     }
 
-    // Ctrl+R to search prompt history
-    if (key.ctrl && input === 'r') {
-      setView('promptSearch');
-      return; // Prevent 'r' from being added to input
-    }
+    // Note: Ctrl+R is now handled in InputBox for inline fuzzy search
 
     // Escape to stop/force stop agent execution
     if (key.escape && isStreaming) {
@@ -885,7 +882,7 @@ export const App: React.FC<AppProps> = ({ initialConversationId, initialAgentId,
                   <Text color={CYAN}>Ctrl+O</Text>
                   <Text color={WHITE}>  Toggle detailed/compact view</Text>
                   <Text color={CYAN}>Ctrl+R</Text>
-                  <Text color={WHITE}>  Search prompt history</Text>
+                  <Text color={WHITE}>  Fuzzy find prompts (like fzf)</Text>
                   <Text color={CYAN}>↑/↓ Arrows</Text>
                   <Text color={WHITE}>  Navigate prompt history</Text>
                   <Text color={CYAN}>Escape</Text>
@@ -963,6 +960,7 @@ export const App: React.FC<AppProps> = ({ initialConversationId, initialAgentId,
               value={inputValue}
               onChange={setInputValue}
               onNavigateHistory={handleHistoryNavigation}
+              promptHistory={promptHistory}
             />
           </>
         )}
@@ -1007,17 +1005,6 @@ export const App: React.FC<AppProps> = ({ initialConversationId, initialAgentId,
             onCancel={() => setView('chat')}
           />
         )}
-
-        {view === 'promptSearch' && (
-          <PromptSearch
-            prompts={promptHistory}
-            onSelect={(text) => {
-              setInputValue(text);
-              setView('chat');
-            }}
-            onCancel={() => setView('chat')}
-          />
-        )}
       </Box>
 
       {/* Status Bar - at bottom */}
@@ -1035,6 +1022,12 @@ export const App: React.FC<AppProps> = ({ initialConversationId, initialAgentId,
         modeColor={getModeInfo(agentMode).color}
         showExitHint={showExitHint}
       />
+
+      {/* Tooltip Hints - helpful tips that appear periodically */}
+      <TooltipHints enabled={true} intervalSeconds={45} />
+
+      {/* Shortcut Bar - zellij-like keyboard shortcuts */}
+      <ShortcutBar view={view} isStreaming={isStreaming} />
     </Box>
   );
 };
