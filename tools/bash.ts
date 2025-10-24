@@ -85,23 +85,36 @@ export const BashTool: Tool = {
     let trimmedStdout = stdout.trim();
     const trimmedStderr = errorMessage.trim();
 
-    // OUTPUT SUMMARIZATION: Prevent excessively long outputs from bloating context
-    // This helps prevent 400 errors from Cerebras API due to oversized requests
-    const MAX_OUTPUT_LENGTH = 10000; // 10K chars - balance between context and size
-    if (trimmedStdout.length > MAX_OUTPUT_LENGTH) {
-      const headLength = Math.floor(MAX_OUTPUT_LENGTH * 0.3); // First 30%
-      const tailLength = Math.floor(MAX_OUTPUT_LENGTH * 0.7); // Last 70%
-      const omittedChars = trimmedStdout.length - MAX_OUTPUT_LENGTH;
-      const omittedLines = (trimmedStdout.match(/\n/g) || []).length -
-                          (trimmedStdout.substring(0, headLength).match(/\n/g) || []).length -
-                          (trimmedStdout.substring(trimmedStdout.length - tailLength).match(/\n/g) || []).length;
+    // OUTPUT SIZE LIMIT: Block oversized outputs to prevent context bloat and API errors
+    // Limit based on lines for simplicity and clarity
+    const MAX_OUTPUT_LINES = 2000;
+    const numLines = (trimmedStdout.match(/\n/g) || []).length + 1;
 
-      trimmedStdout =
-        trimmedStdout.substring(0, headLength) +
-        `\n\n... [Output truncated: ${omittedChars.toLocaleString()} chars and ~${omittedLines} lines omitted] ...\n\n` +
-        trimmedStdout.substring(trimmedStdout.length - tailLength);
+    if (numLines > MAX_OUTPUT_LINES) {
+      console.error(`🚫 [Output Blocked] Command output too large: ${numLines.toLocaleString()} lines (max: ${MAX_OUTPUT_LINES.toLocaleString()} lines)`);
 
-      console.error(`⚠️  [Output Summarization] Truncated bash output from ${stdout.length.toLocaleString()} to ${trimmedStdout.length.toLocaleString()} chars`);
+      // Return error message with smart suggestions to avoid too-granular queries
+      trimmedStdout = `<error>Command output is too large (${numLines.toLocaleString()} lines). Maximum allowed: ${MAX_OUTPUT_LINES.toLocaleString()} lines
+
+SMART ALTERNATIVES (don't break into tiny pieces):
+
+1. SCOPE DOWN YOUR QUERY - Ask more specific questions instead of "tell me about everything"
+   Example: Instead of "explain all files" → "explain the agent architecture" or "how does tool execution work"
+
+2. USE TARGETED FILE PATTERNS - Filter by directory or file type
+   Example: find . -name "*.ts" -path "*/agents/*" (not find . -name "*.ts")
+   Example: ls -la agents/ tools/ core/ (not ls -la)
+
+3. USE GREP WITH PATTERNS - Search for relevant content, not dump everything
+   Example: grep -r "export.*Agent" --include="*.ts" agents/
+   Example: grep -r "class.*Tool" --include="*.ts" tools/
+
+4. RETHINK YOUR APPROACH - Maybe you don't need to read raw output
+   - Instead of catting 20 files → Ask "what are the main components and how do they interact"
+   - Instead of finding all files → Ask "where is X functionality implemented"
+   - Let your understanding guide focused queries, not brute-force data gathering
+
+DON'T fragment into many tiny commands. Think strategically about what you actually need.</error>`;
     }
 
     const hasBoth = trimmedStdout && trimmedStderr;
@@ -146,9 +159,12 @@ export const BashTool: Tool = {
       };
 
       // Configure shell execution with PTY support
+      // CRITICAL: Use large terminal width to prevent line wrapping
+      // Line wrapping breaks output mid-word (e.g., "sys.stderr" → "sys.s\ntderr")
+      // which can cause 400 errors when sent to Cerebras API
       const shellExecutionConfig: ShellExecutionConfig = {
-        terminalWidth: 80,
-        terminalHeight: 30,
+        terminalWidth: 1000, // Large width to prevent wrapping
+        terminalHeight: 1000, // Large height to prevent pagination
         showColor: true,
       };
 

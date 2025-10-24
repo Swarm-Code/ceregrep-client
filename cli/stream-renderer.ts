@@ -9,6 +9,7 @@ import { Message } from '../core/messages.js';
 
 export class StreamRenderer {
   private spinner: Ora | null = null;
+  private ghostSpinner: Ora | null = null; // Separate spinner for ghost commands
   private currentToolCount = 0;
   private verbose: boolean;
   private accumulatedMessages: Message[] = [];
@@ -76,11 +77,11 @@ export class StreamRenderer {
     const toolUseBlocks = content.filter((c: any) => c.type === 'tool_use');
     const textBlocks = content.filter((c: any) => c.type === 'text');
 
-    // If there's text content but no tools, clear the line if we had shown tools
+    // If there's text content but no tools, stop ghost spinner
     if (textBlocks.length > 0 && toolUseBlocks.length === 0) {
-      if (this.currentToolCount > 0) {
-        // Clear the line
-        process.stdout.write('\r' + ' '.repeat(process.stdout.columns || 80) + '\r');
+      if (this.ghostSpinner) {
+        this.ghostSpinner.stop();
+        this.ghostSpinner = null;
         this.currentToolCount = 0;
       }
       // Don't display text here - let the final response handler do it
@@ -100,20 +101,27 @@ export class StreamRenderer {
           const cmd = input.command.length > 40
             ? input.command.substring(0, 40) + '...'
             : input.command;
-          return chalk.gray(`${cmd}`);
+          return `${cmd}`;
         } else if (toolName === 'Grep' && input.pattern) {
           const pattern = input.pattern.length > 30
             ? input.pattern.substring(0, 30) + '...'
             : input.pattern;
-          return chalk.gray(`grep "${pattern}"`);
+          return `grep "${pattern}"`;
         } else {
-          return chalk.gray(toolName.toLowerCase());
+          return toolName.toLowerCase();
         }
-      }).join(chalk.gray(' → '));
+      }).join(' → ');
 
-      // Write tool execution on same line
-      const toolLine = chalk.gray('⚡ ') + toolNames;
-      process.stdout.write('\r' + toolLine);
+      // Use spinner instead of overwriting stdout
+      if (this.ghostSpinner) {
+        this.ghostSpinner.text = chalk.gray(toolNames);
+      } else {
+        this.ghostSpinner = ora({
+          text: chalk.gray(toolNames),
+          color: 'cyan',
+          spinner: 'dots'
+        }).start();
+      }
     }
   }
 
