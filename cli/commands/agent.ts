@@ -19,6 +19,7 @@ import { getConfig } from '../../config/loader.js';
 import { createAgentClientConfig } from '../../agents/config-merger.js';
 import { StreamRenderer } from '../stream-renderer.js';
 import { getTokenStats } from '../../core/tokens.js';
+import { Message } from '../../core/messages.js';
 import { PersistentShell } from '../../utils/shell.js';
 import { disconnectAllServers } from '../../mcp/client.js';
 
@@ -88,14 +89,17 @@ export function createAgentCommand(): Command {
         // Create client with agent config
         const client = new CeregrepClient(clientConfig);
 
-        // Stream messages
-        for await (const message of client.queryStream(prompt, clientConfig)) {
+        // Collect messages for stats
+        const allMessages: Message[] = [];
+
+        // Stream messages with stateless SDK
+        for await (const message of client.queryStream([], prompt, clientConfig)) {
           renderer.handleMessage(message);
+          allMessages.push(message);
         }
 
-        // Get token stats
-        const history = client.getHistory();
-        const stats = getTokenStats(history);
+        // Get token stats from collected messages
+        const stats = getTokenStats(allMessages);
 
         // Finish rendering
         renderer.finish();

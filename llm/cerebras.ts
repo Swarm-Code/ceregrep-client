@@ -9,15 +9,9 @@ import { Tool } from '../core/tool.js';
 import { AssistantMessage, UserMessage } from '../core/messages.js';
 import { z } from 'zod';
 import { zodToJsonSchema } from 'zod-to-json-schema';
-import { countTokens } from '../core/tokens.js';
 
 const CEREBRAS_BASE_URL = 'https://api.cerebras.ai/v1';
 const CEREBRAS_COST_PER_MILLION_TOKENS = 2.0; // Both input and output
-
-// CRITICAL: Cerebras API has a hard token limit of 131,072 tokens per request
-// This is the actual limit discovered through testing (returns 400 when exceeded)
-const CEREBRAS_MAX_TOKENS_PER_REQUEST = 131072;
-const CEREBRAS_SAFE_LIMIT = Math.floor(CEREBRAS_MAX_TOKENS_PER_REQUEST * 0.95); // 95% safety margin
 
 // Retry configuration
 const MAX_RETRIES = 2; // 1-2 retries max as requested
@@ -44,6 +38,174 @@ async function sleep(ms: number): Promise<void> {
 }
 
 /**
+ * COMPREHENSIVE DATA CLEANER FOR CEREBRAS
+ * Handles all malformed data issues from Cerebras/Qwen:
+ * - Double-escaped JSON arrays
+ * - Python dict formats
+ * - Fragmented messages
+ * - Unicode issues
+ * - Null/undefined values
+ */
+function cleanDataForCerebras(data: any): any {
+  // Handle null/undefined
+  if (data === null || data === undefined) {
+    return '';
+  }
+
+  // If it's a string, clean it thoroughly
+  if (typeof data === 'string') {
+    let cleaned = data;
+
+    // 1. Handle double-escaped JSON
+    // Check if it looks like double-escaped JSON
+    if (cleaned.includes('\\\\') || cleaned.includes('\\"')) {
+      try {
+        // Try to parse as JSON multiple times to handle double/triple escaping
+        let parsed = cleaned;
+        let attempts = 0;
+        while (attempts < 3 && (parsed.includes('\\\\') || parsed.includes('\\"'))) {
+          try {
+            parsed = JSON.parse(`"${parsed}"`); // Parse as escaped string
+          } catch {
+            break;
+          }
+          attempts++;
+        }
+        if (parsed !== cleaned) {
+          cleaned = parsed;
+        }
+      } catch {
+        // If parsing fails, manually unescape
+        cleaned = cleaned
+          .replace(/\\\\/g, '\\')
+          .replace(/\\"/g, '"')
+          .replace(/\\n/g, '\n')
+          .replace(/\\r/g, '\r')
+          .replace(/\\t/g, '\t');
+      }
+    }
+
+    // 2. Handle Python dict format
+    // Look for Python-style dict indicators
+    if (cleaned.includes("'") && (cleaned.includes(': ') || cleaned.includes("={'") || cleaned.includes("': '"))) {
+      // Try to convert Python dict to JSON
+      // Replace single quotes with double quotes, but be careful with apostrophes in text
+      const pythonDictPattern = /(\{[^}]*\}|\[[^\]]*\])/g;
+      cleaned = cleaned.replace(pythonDictPattern, (match) => {
+        // Only process if it looks like a dict/list
+        if ((match.includes("'") && match.includes(':')) || (match.startsWith('[') && match.includes("'"))) {
+          return match
+            .replace(/'/g, '"') // Replace single quotes
+            .replace(/True/g, 'true')  // Python True -> JSON true
+            .replace(/False/g, 'false') // Python False -> JSON false
+            .replace(/None/g, 'null');  // Python None -> JSON null
+        }
+        return match;
+      });
+    }
+
+    // 3. Clean Unicode and special characters
+    cleaned = cleaned
+      // Remove broken Unicode characters
+      .replace(/[\u{D800}-\u{DFFF}]/gu, '') // Remove lone surrogates
+      .replace(/[^\x00-\x7F\u0080-\uFFFF]/g, '') // Remove invalid chars
+      .replace(/\uFFFD/g, '') // Remove replacement character
+      // Replace box drawing characters with simple alternatives
+      .replace(/[\u2500-\u257F]/g, '-') // Box drawing chars
+      .replace(/[╔╗╚╝║═╠╣╬]/g, '-') // Extended box chars
+      // Remove other problematic characters
+      .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, ''); // Control characters (except \t, \n, \r)
+
+    // 4. Handle fragmented content
+    // If content looks fragmented (e.g., incomplete JSON), try to clean it up
+    if (cleaned.startsWith('{') && !cleaned.endsWith('}')) {
+      // Incomplete JSON object
+      cleaned = cleaned + '}';
+    } else if (cleaned.startsWith('[') && !cleaned.endsWith(']')) {
+      // Incomplete JSON array
+      cleaned = cleaned + ']';
+    }
+
+    // 5. Final validation - if it's supposed to be JSON, validate it
+    if ((cleaned.startsWith('{') && cleaned.endsWith('}')) ||
+        (cleaned.startsWith('[') && cleaned.endsWith(']'))) {
+      try {
+        const parsed = JSON.parse(cleaned);
+        // If it parses successfully, re-stringify to ensure consistency
+        cleaned = JSON.stringify(parsed);
+      } catch {
+        // If it doesn't parse, it's probably just text that happens to start/end with brackets
+      }
+    }
+
+    return cleaned;
+  }
+
+  // If it's an object or array, recursively clean all values
+  if (typeof data === 'object') {
+    if (Array.isArray(data)) {
+      return data.map(item => cleanDataForCerebras(item));
+    } else {
+      const cleaned: any = {};
+      for (const [key, value] of Object.entries(data)) {
+        // Clean the key too (in case it has issues)
+        const cleanKey = typeof key === 'string' ? cleanDataForCerebras(key) : key;
+        cleaned[cleanKey] = cleanDataForCerebras(value);
+      }
+      return cleaned;
+    }
+  }
+
+  // For other types (numbers, booleans), return as-is
+  return data;
+}
+
+/**
+ * Clean and validate a message for Cerebras API
+ */
+function cleanMessageForCerebras(message: any): any {
+  // Create a deep copy to avoid mutation
+  const cleaned = JSON.parse(JSON.stringify(message));
+
+  // Clean the content
+  if (cleaned.content !== undefined) {
+    cleaned.content = cleanDataForCerebras(cleaned.content);
+    // Ensure content is never empty for assistant messages with tool calls
+    if (cleaned.role === 'assistant' && cleaned.tool_calls && (!cleaned.content || cleaned.content === '')) {
+      cleaned.content = ' '; // Use space to avoid empty string issues
+    }
+  }
+
+  // Clean tool calls if present
+  if (cleaned.tool_calls) {
+    cleaned.tool_calls = cleaned.tool_calls.map((tc: any) => {
+      const cleanedTc = { ...tc };
+      if (cleanedTc.function?.arguments) {
+        // Ensure arguments is a string (it should be JSON string)
+        if (typeof cleanedTc.function.arguments !== 'string') {
+          cleanedTc.function.arguments = JSON.stringify(cleanedTc.function.arguments);
+        } else {
+          // Clean the arguments string
+          cleanedTc.function.arguments = cleanDataForCerebras(cleanedTc.function.arguments);
+        }
+      }
+      return cleanedTc;
+    });
+  }
+
+  // Clean tool response content if this is a tool message
+  if (cleaned.role === 'tool' && cleaned.content !== undefined) {
+    cleaned.content = cleanDataForCerebras(cleaned.content);
+    // Ensure tool responses are never empty
+    if (!cleaned.content || cleaned.content === '') {
+      cleaned.content = 'Tool executed successfully';
+    }
+  }
+
+  return cleaned;
+}
+
+/**
  * Calculate exponential backoff delay
  */
 function calculateBackoffDelay(attempt: number): number {
@@ -57,6 +219,11 @@ function calculateBackoffDelay(attempt: number): number {
  * Check if error is retryable
  */
 function isRetryableError(error: any): boolean {
+  // Retry on timeout errors (OpenAI SDK throws APIConnectionTimeoutError)
+  if (error.constructor?.name === 'APIConnectionTimeoutError' || error.message?.includes('timed out')) {
+    return true;
+  }
+
   // Retry on connection errors
   if (error.code === 'ECONNRESET' || error.code === 'ETIMEDOUT' || error.code === 'ECONNREFUSED') {
     return true;
@@ -231,13 +398,9 @@ export async function queryCerebras(
             }
 
             // CRITICAL: Ensure tool content is never null/undefined
-            let toolContent: string;
-            if (typeof tr.content === 'string' && tr.content.trim()) {
-              toolContent = tr.content;
-            } else if (tr.content !== null && tr.content !== undefined) {
-              const jsonStr = JSON.stringify(tr.content);
-              toolContent = (jsonStr && jsonStr !== 'null') ? jsonStr : 'Tool executed successfully';
-            } else {
+            // Use comprehensive data cleaner for tool responses
+            let toolContent = cleanDataForCerebras(tr.content);
+            if (!toolContent || toolContent === '') {
               toolContent = 'Tool executed successfully';
             }
 
@@ -256,9 +419,10 @@ export async function queryCerebras(
               .map((item: any) => typeof item === 'string' ? item : item.text)
               .join('\n');
             if (textStr.trim()) {
+              const cleanedContent = cleanDataForCerebras(textStr);
               apiMessages.push({
                 role: 'user',
-                content: textStr,
+                content: cleanedContent,
               });
             }
           }
@@ -286,9 +450,11 @@ export async function queryCerebras(
         userContent = JSON.stringify(content);
       }
 
+      // Clean the user content before adding
+      const cleanedUserContent = cleanDataForCerebras(userContent);
       apiMessages.push({
         role: 'user',
-        content: userContent,
+        content: cleanedUserContent,
       });
     } else if (msg.message.role === 'assistant') {
       // CRITICAL: Flush all pending tool responses before adding assistant message
@@ -310,14 +476,18 @@ export async function queryCerebras(
           }
           return true;
         })
-        .map((c: any) => ({
-          id: c.id,
-          type: 'function' as const,
-          function: {
-            name: c.name,
-            arguments: JSON.stringify(c.input || {}), // Default to empty object if input is null
-          },
-        }));
+        .map((c: any) => {
+          // Clean the tool input/arguments
+          const cleanedInput = cleanDataForCerebras(c.input || {});
+          return {
+            id: c.id,
+            type: 'function' as const,
+            function: {
+              name: c.name,
+              arguments: JSON.stringify(cleanedInput), // Stringify the cleaned input
+            },
+          };
+        });
 
       // Extract text content
       const textContent = contentArray
@@ -328,16 +498,17 @@ export async function queryCerebras(
       if (toolCalls.length > 0) {
         // When there are tool calls:
         // CRITICAL: OpenAI/Cerebras API requires content when tool_calls present
-        // Use a space if no text content to avoid empty string issues
-        const trimmedContent = textContent.trim();
+        // Clean the text content
+        const cleanedTextContent = cleanDataForCerebras(textContent.trim());
+
         const msgContent: any = {
           role: 'assistant',
           tool_calls: toolCalls,
         };
 
         // Only include content if it's not empty
-        if (trimmedContent) {
-          msgContent.content = trimmedContent;
+        if (cleanedTextContent) {
+          msgContent.content = cleanedTextContent;
         } else {
           // Don't omit content field - set to space to avoid API issues
           msgContent.content = ' ';
@@ -345,9 +516,11 @@ export async function queryCerebras(
 
         apiMessages.push(msgContent);
       } else {
+        // Clean the text content for regular assistant messages
+        const cleanedContent = cleanDataForCerebras(textContent);
         apiMessages.push({
           role: 'assistant',
-          content: textContent || 'No response',
+          content: cleanedContent || 'No response',
         });
       }
     }
@@ -356,28 +529,12 @@ export async function queryCerebras(
   // CRITICAL: Flush any remaining tool responses at the end
   flushPendingToolResponses();
 
-  // CONTEXT MANAGEMENT: Trim conversation history if it exceeds limits
-  // This prevents 400 errors from Cerebras API due to oversized requests
-  const MAX_MESSAGES = 20; // Keep last 20 messages (excluding system)
-  const estimateTokens = (text: string) => Math.ceil(text.length / 4); // Rough token estimate
-
-  if (apiMessages.length > MAX_MESSAGES + 1) { // +1 for system message
-    const systemMsg = apiMessages.find(m => m.role === 'system');
-    const nonSystemMessages = apiMessages.filter(m => m.role !== 'system');
-    const recentMessages = nonSystemMessages.slice(-MAX_MESSAGES);
-
-    apiMessages.length = 0;
-    if (systemMsg) {
-      apiMessages.push(systemMsg);
-    }
-    apiMessages.push(...recentMessages);
-
-    console.error(`⚠️  [Context Management] Trimmed conversation from ${nonSystemMessages.length + 1} to ${apiMessages.length} messages`);
-    console.error(`   Kept: 1 system message + ${recentMessages.length} recent messages`);
-  }
-
   // Format tools
   const apiTools = formatToolsForOpenAI(tools);
+
+  // COMPREHENSIVE FINAL CLEANING: Clean all messages before sending to Cerebras
+  // This ensures we never send malformed data regardless of what Cerebras sent us
+  const cleanedApiMessages = apiMessages.map(msg => cleanMessageForCerebras(msg));
 
   const startTime = Date.now();
   const timestamp = Date.now();
@@ -387,7 +544,7 @@ export async function queryCerebras(
   // Reference: https://github.com/vybestack/llxprt-code OpenAIProvider.ts:742-755
   let requestParams: any = {
     model,
-    messages: apiMessages,
+    messages: cleanedApiMessages,  // Use cleaned messages
     temperature: options.temperature ?? 0.7,
     top_p: options.top_p ?? 0.8,
     // Don't set max_tokens - let Cerebras use its default
@@ -410,13 +567,8 @@ export async function queryCerebras(
   const requestSizeMB = (requestSizeBytes / (1024 * 1024)).toFixed(2);
   const MAX_REQUEST_SIZE_BYTES = 1_500_000; // 1.5MB conservative limit
 
-  // CRITICAL TOKEN LIMIT VALIDATION: Cerebras has hard limit of 131,072 tokens
-  // Check token count BEFORE sending to avoid 400 errors
-  const tokenCount = countTokens(apiMessages);
-  const tokenLimitExceeded = tokenCount > CEREBRAS_SAFE_LIMIT;
-
   // Log telemetry for all requests
-  console.error(`📊 [Request Stats] ${requestParams.messages.length} messages, ${requestSizeKB}KB payload, ${tokenCount} tokens`);
+  // console.error(`📊 [Request Stats] ${requestParams.messages.length} messages, ${requestSizeKB}KB payload`);
 
   if (requestSizeBytes > MAX_REQUEST_SIZE_BYTES) {
     console.error(`⚠️  [Request Size Limit] Request size ${requestSizeMB}MB exceeds safe limit of ${(MAX_REQUEST_SIZE_BYTES / (1024 * 1024)).toFixed(2)}MB`);
@@ -450,39 +602,6 @@ export async function queryCerebras(
     }
   }
 
-  // TOKEN LIMIT VALIDATION: Reduce messages if token count exceeds Cerebras limit
-  if (tokenLimitExceeded) {
-    console.error(`\n⚠️  [TOKEN LIMIT] Current tokens: ${tokenCount} exceeds safe limit of ${CEREBRAS_SAFE_LIMIT}`);
-    console.error(`   Cerebras API hard limit: ${CEREBRAS_MAX_TOKENS_PER_REQUEST} tokens`);
-    console.error(`   Applying aggressive message reduction...`);
-
-    // Keep system message + progressively fewer recent messages
-    const systemMsg = requestParams.messages.find((m: any) => m.role === 'system');
-    const nonSystemMessages = requestParams.messages.filter((m: any) => m.role !== 'system');
-
-    // Try reducing to 8, then 5, then 3 messages
-    for (const targetCount of [8, 5, 3]) {
-      const reducedMessages = nonSystemMessages.slice(-targetCount);
-      const testMessages = systemMsg ? [systemMsg, ...reducedMessages] : reducedMessages;
-      const testTokenCount = countTokens(testMessages);
-
-      if (testTokenCount <= CEREBRAS_SAFE_LIMIT) {
-        requestParams.messages = testMessages;
-        apiMessages.length = 0;
-        apiMessages.push(...testMessages);
-        console.error(`   ✅ Reduced to ${testMessages.length} messages (${testTokenCount} tokens)`);
-        break;
-      }
-    }
-
-    // Final token check
-    const finalTokenCount = countTokens(apiMessages);
-    if (finalTokenCount > CEREBRAS_SAFE_LIMIT) {
-      console.error(`   ⚠️  Still ${finalTokenCount} tokens after reduction. Request may fail.`);
-      console.error(`   Consider breaking this query into multiple smaller requests.`);
-    }
-  }
-
   try {
     // ALWAYS save requests for debugging - we need to see what's failing
     const filename = `/tmp/cerebras-request-${timestamp}-${requestParams.messages.length}msg.json`;
@@ -490,7 +609,7 @@ export async function queryCerebras(
       await import('fs').then(fs =>
         fs.promises.writeFile(filename, JSON.stringify(requestParams, null, 2))
       );
-      console.error(`🔍 [${new Date().toISOString()}] Saved ${requestParams.messages.length}-message request to ${filename}`);
+      // console.error(`🔍 [${new Date().toISOString()}] Saved ${requestParams.messages.length}-message request to ${filename}`);
     } catch (e) {
       console.error(`Failed to save request: ${e}`);
     }
@@ -641,7 +760,7 @@ export async function queryCerebras(
       await import('fs').then(fs =>
         fs.promises.writeFile(responseFilename, JSON.stringify(response, null, 2))
       );
-      console.error(`✅ [${new Date().toISOString()}] Saved response to ${responseFilename}`);
+      // console.error(`✅ [${new Date().toISOString()}] Saved response to ${responseFilename}`);
     } catch (e) {
       console.error(`Failed to save response: ${e}`);
     }
