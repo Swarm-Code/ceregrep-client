@@ -1,6 +1,12 @@
 /**
- * TypeScript SDK for Ceregrep Agent Framework
- * Provides programmatic access to the agent
+ * TypeScript SDK for Scout Agent Framework
+ * STATELESS VERSION - Matches Claude Code's architecture
+ *
+ * Key principles:
+ * 1. SDK does NOT maintain message history
+ * 2. Messages are passed as parameters to every query
+ * 3. UI owns all state management
+ * 4. No internal message accumulation
  */
 
 import { Tool } from '../../core/tool.js';
@@ -20,11 +26,10 @@ export interface QueryOptions {
   verbose?: boolean;
   debug?: boolean;
   dangerouslySkipPermissions?: boolean;
-  compactionThreshold?: number; // Token threshold for auto-compaction (default 100k)
-  enableThinking?: boolean; // Enable extended thinking mode
-  ultrathinkMode?: boolean; // Enable ultrathink mode (more tokens)
-  abortController?: AbortController; // Optional abort controller for cancellation
-  systemPrompt?: string[]; // Custom system prompt (overrides default)
+  enableThinking?: boolean;
+  ultrathinkMode?: boolean;
+  abortController?: AbortController;
+  systemPrompt?: string[];
 }
 
 export interface QueryResult {
@@ -36,13 +41,14 @@ export interface StreamQueryResult {
 }
 
 /**
- * Ceregrep Client for programmatic agent invocation
+ * Scout Client - STATELESS implementation
+ * Matches Claude Code's architecture where the SDK doesn't maintain state
  */
-export class CeregrepClient {
+export class ScoutClient {
   private config = getConfig();
-  private messages: Message[] = [];
   private tools: Tool[] = [];
   private model: string;
+  private initialized: boolean = false;
 
   constructor(options: QueryOptions = {}) {
     this.model = options.model || this.config.model || 'claude-sonnet-4-20250514';
@@ -50,40 +56,45 @@ export class CeregrepClient {
 
   /**
    * Initialize client (load tools)
+   * MEMOIZED: Tools are loaded once and cached for the entire client instance
    */
   async initialize() {
-    this.tools = await getTools(true);
+    if (this.initialized && this.tools.length > 0) {
+      return; // Already initialized
+    }
+
+    // Load MCP tools but NOT agent tools
+    this.tools = await getTools(true, false);
+    this.initialized = true;
   }
 
   /**
-   * Query the agent with a prompt
+   * Query the agent with existing messages and a new prompt
+   * STATELESS: Receives full message history as parameter
+   *
+   * @param messages - Existing conversation messages (owned by UI)
+   * @param prompt - New user input to add
+   * @param options - Query options
    */
-  async query(prompt: string | ContentBlockParam[], options: QueryOptions = {}): Promise<QueryResult> {
-    if (this.tools.length === 0) {
-      await this.initialize();
-    }
+  async query(
+    messages: Message[],
+    prompt: string | ContentBlockParam[],
+    options: QueryOptions = {}
+  ): Promise<QueryResult> {
+    // Ensure tools are initialized
+    await this.initialize();
 
+    // Use client tools unless explicitly overridden
     const tools = options.tools || this.tools;
     const model = options.model || this.model;
     const apiKey = options.apiKey || this.config.apiKey;
-    const compactionThreshold = options.compactionThreshold || this.config.compactionThreshold || 100000;
 
-    // Silently compact if needed (no messages to AI to avoid lazy behavior)
-    if (shouldCompact(this.messages, compactionThreshold)) {
-      if (options.debug) {
-        const stats = getTokenStats(this.messages);
-        console.log(`[CEREGREP DEBUG] Auto-compacting conversation (${stats.total} tokens >= ${compactionThreshold})`);
-      }
-      await this.compact();
-      if (options.debug) {
-        const newStats = getTokenStats(this.messages);
-        console.log(`[CEREGREP DEBUG] Compaction complete (reduced tokens: ${newStats.total})`);
-      }
-    }
-
-    // Create user message
+    // Create user message for the new prompt
     const userMessage = createUserMessage(prompt);
-    this.messages.push(userMessage);
+
+    // Build the complete message array for this query
+    // This matches Claude Code's pattern of [...messages, newUserMessage]
+    const messagesForQuery = [...messages, userMessage];
 
     // System prompt (use custom if provided, otherwise default)
     const systemPrompt = options.systemPrompt || [
@@ -99,13 +110,13 @@ export class CeregrepClient {
       '- Provide thorough explanations of how things work, why they work that way, and what each piece does.',
       '- Word for word: "Better to add too much context than necessary" - follow this principle strictly.',
       '',
-      'CRITICAL INSTRUCTION - MUST USE TOOLS TO GATHER INFORMATION:',
-      '- You MUST use grep to search for information before answering questions about code.',
-      '- You CANNOT rely on stored context or prior knowledge about the codebase.',
-      '- Everything must be read using tools before giving an explanation.',
-      '- This is to ensure that you do not lazily answer questions without verifying current state.',
-      '- Always grep for relevant files, read the actual code, and then provide your explanation.',
-      '- Never answer based solely on assumptions or memory - always verify with tools first.',
+      'IMPORTANT - USE TOOLS WHEN NEEDED:',
+      '- Use grep or bash tools to search for specific information when asked about code.',
+      '- For general explanations or high-level overviews, you can provide answers based on what you discover.',
+      '- Once you have gathered sufficient information, provide a comprehensive answer.',
+      '- Avoid excessive tool usage - gather what you need, then synthesize and respond.',
+      '- If asked for specific code or files, use tools to verify current state.',
+      '- Balance thoroughness with efficiency - do not search indefinitely.',
     ];
 
     // Context
@@ -114,13 +125,12 @@ export class CeregrepClient {
       date: new Date().toISOString(),
     };
 
-    // Permission checker (auto-approve for SDK usage unless specified)
+    // Permission checker
     const canUseTool = async (toolName: string, input: any) => {
       if (options.dangerouslySkipPermissions) {
         return true;
       }
-      // In SDK mode, default to auto-approve
-      return true;
+      return true; // In SDK mode, default to auto-approve
     };
 
     // Tool context
@@ -142,11 +152,10 @@ export class CeregrepClient {
       readFileTimestamps: {},
     };
 
-    // Execute query (pass a copy to avoid mutation issues)
+    // Execute query and collect all messages
     const queryMessages: Message[] = [];
-    const messagesCopy = [...this.messages];
     for await (const message of agentQuery(
-      messagesCopy,
+      messagesForQuery,
       systemPrompt,
       context,
       canUseTool,
@@ -157,9 +166,8 @@ export class CeregrepClient {
       queryMessages.push(message);
     }
 
-    // Add all new messages to history after completion
-    this.messages.push(...queryMessages);
-
+    // Return ONLY the new messages from this query
+    // The UI will append these to its existing conversation
     return {
       messages: queryMessages,
     };
@@ -167,34 +175,31 @@ export class CeregrepClient {
 
   /**
    * Query the agent with streaming message output
-   * Yields messages in real-time as they are generated
+   * STATELESS: Receives full message history as parameter
+   *
+   * @param messages - Existing conversation messages (owned by UI)
+   * @param prompt - New user input to add
+   * @param options - Query options
    */
-  async* queryStream(prompt: string | ContentBlockParam[], options: QueryOptions = {}): AsyncGenerator<Message, void> {
-    if (this.tools.length === 0) {
-      await this.initialize();
-    }
+  async* queryStream(
+    messages: Message[],
+    prompt: string | ContentBlockParam[],
+    options: QueryOptions = {}
+  ): AsyncGenerator<Message, void> {
+    // Ensure tools are initialized
+    await this.initialize();
 
+    // Use client tools unless explicitly overridden
     const tools = options.tools || this.tools;
     const model = options.model || this.model;
     const apiKey = options.apiKey || this.config.apiKey;
-    const compactionThreshold = options.compactionThreshold || this.config.compactionThreshold || 100000;
 
-    // Silently compact if needed (no messages to AI to avoid lazy behavior)
-    if (shouldCompact(this.messages, compactionThreshold)) {
-      if (options.debug) {
-        const stats = getTokenStats(this.messages);
-        console.log(`[CEREGREP DEBUG] Auto-compacting conversation (${stats.total} tokens >= ${compactionThreshold})`);
-      }
-      await this.compact();
-      if (options.debug) {
-        const newStats = getTokenStats(this.messages);
-        console.log(`[CEREGREP DEBUG] Compaction complete (reduced tokens: ${newStats.total})`);
-      }
-    }
-
-    // Create user message
+    // Create user message for the new prompt
     const userMessage = createUserMessage(prompt);
-    this.messages.push(userMessage);
+
+    // Build the complete message array for this query
+    // This matches Claude Code's pattern of [...messages, newUserMessage]
+    const messagesForQuery = [...messages, userMessage];
 
     // System prompt (use custom if provided, otherwise default)
     const systemPrompt = options.systemPrompt || [
@@ -210,13 +215,13 @@ export class CeregrepClient {
       '- Provide thorough explanations of how things work, why they work that way, and what each piece does.',
       '- Word for word: "Better to add too much context than necessary" - follow this principle strictly.',
       '',
-      'CRITICAL INSTRUCTION - MUST USE TOOLS TO GATHER INFORMATION:',
-      '- You MUST use grep to search for information before answering questions about code.',
-      '- You CANNOT rely on stored context or prior knowledge about the codebase.',
-      '- Everything must be read using tools before giving an explanation.',
-      '- This is to ensure that you do not lazily answer questions without verifying current state.',
-      '- Always grep for relevant files, read the actual code, and then provide your explanation.',
-      '- Never answer based solely on assumptions or memory - always verify with tools first.',
+      'IMPORTANT - USE TOOLS WHEN NEEDED:',
+      '- Use grep or bash tools to search for specific information when asked about code.',
+      '- For general explanations or high-level overviews, you can provide answers based on what you discover.',
+      '- Once you have gathered sufficient information, provide a comprehensive answer.',
+      '- Avoid excessive tool usage - gather what you need, then synthesize and respond.',
+      '- If asked for specific code or files, use tools to verify current state.',
+      '- Balance thoroughness with efficiency - do not search indefinitely.',
     ];
 
     // Context
@@ -252,10 +257,12 @@ export class CeregrepClient {
       readFileTimestamps: {},
     };
 
-    // Execute query and yield messages in real-time (pass a copy to avoid mutation issues)
-    const messagesCopy = [...this.messages];
+    // First yield the user message so UI can display it immediately
+    yield userMessage;
+
+    // Execute query and stream messages in real-time
     for await (const message of agentQuery(
-      messagesCopy,
+      messagesForQuery,
       systemPrompt,
       context,
       canUseTool,
@@ -263,43 +270,58 @@ export class CeregrepClient {
       querySonnet,
       formatSystemPromptWithContext,
     )) {
-      // Add message to history in real-time so getHistory() returns current state
-      this.messages.push(message);
+      // Yield each message as it comes
+      // The UI will collect and append these to its conversation
       yield message;
     }
   }
 
   /**
-   * Get conversation history
+   * Compact a conversation (UI-initiated) - FOLLOWS CLAUDE CODE PATTERN
+   * Generates a summary and returns ONLY the summary messages
+   * The UI should clear its history and use these new messages
+   *
+   * @param messages - Current conversation to compact
+   * @returns New messages containing just the compact command and summary
    */
-  getHistory(): Message[] {
-    return [...this.messages];
-  }
+  async compactConversation(
+    messages: Message[]
+  ): Promise<Message[]> {
+    // If there are very few messages, don't compact
+    if (messages.length < 10) {
+      return messages;
+    }
 
-  /**
-   * Clear conversation history
-   */
-  clearHistory() {
-    this.messages = [];
-  }
+    // Create summary request - EXACT same prompt as Claude Code
+    const summaryPrompt =
+      "Provide a detailed but concise summary of our conversation above. " +
+      "Focus on information that would be helpful for continuing the conversation, " +
+      "including what we did, what we're doing, which files we're working on, " +
+      "and what we're going to do next.";
 
-  /**
-   * Compact conversation history (summarize with LLM)
-   * Keeps recent messages and summarizes older context
-   */
-  async compact(keepRecentCount?: number) {
-    const count = keepRecentCount || this.config.compactionKeepRecentCount || 10;
-    const result = await agentCompact(
-      this.messages,
-      this.tools,
-      querySonnet,
-      this.model,
-      new AbortController().signal,
-      count,
-    );
+    // Generate summary using a separate query
+    const summaryMessages: Message[] = [];
 
-    // Replace messages with: [summary, ...recent messages]
-    this.messages = [result.summary, ...result.recentMessages];
+    for await (const message of this.queryStream(messages, summaryPrompt, {
+      systemPrompt: ['You are a helpful AI assistant tasked with summarizing conversations.'],
+      model: this.model,
+      dangerouslySkipPermissions: true,
+    })) {
+      summaryMessages.push(message);
+    }
+
+    // Extract the summary from the response
+    const assistantMessage = summaryMessages.find(m => m.type === 'assistant');
+    if (!assistantMessage) {
+      throw new Error('Failed to generate conversation summary - no assistant response');
+    }
+
+    // Return new conversation with ONLY the compact command and summary
+    // This exactly matches Claude Code's approach
+    return [
+      createUserMessage('Use the /compact command to clear the conversation history, and start a new conversation with the summary in context.'),
+      assistantMessage,
+    ];
   }
 
   /**
@@ -316,3 +338,6 @@ export class CeregrepClient {
     this.model = model;
   }
 }
+
+// Export the stateless client as the default
+export { ScoutClient as CeregrepClient };

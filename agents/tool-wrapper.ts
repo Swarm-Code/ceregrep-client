@@ -76,8 +76,8 @@ function createAgentTool(agentId: string, agentName: string, agentDescription: s
         // Create client with agent configuration
         const client = new CeregrepClient(clientConfig);
 
-        // Execute agent query
-        const result = await client.query(prompt, clientConfig);
+        // Execute agent query with empty history (agents start fresh)
+        const result = await client.query([], prompt, clientConfig);
 
         // Extract text content from messages
         const responseTexts: string[] = [];

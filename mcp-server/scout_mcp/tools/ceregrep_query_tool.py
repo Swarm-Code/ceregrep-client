@@ -50,6 +50,10 @@ class CeregrepQueryTool(BaseTool):
                 "verbose": {
                     "type": "boolean",
                     "description": "Enable verbose output (optional, defaults to false)"
+                },
+                "timeout": {
+                    "type": "number",
+                    "description": "Timeout in seconds for the query (optional, defaults to 300s/5min). Increase for complex codebase analysis."
                 }
             },
             "required": ["query"]
@@ -61,6 +65,7 @@ class CeregrepQueryTool(BaseTool):
         cwd = arguments.get("cwd", ".")
         model = arguments.get("model")
         verbose = arguments.get("verbose", False)
+        timeout = arguments.get("timeout", 300)  # Default 5 minutes for complex queries
 
         if not query:
             return [TextContent(type="text", text="Error: query parameter is required")]
@@ -75,7 +80,7 @@ class CeregrepQueryTool(BaseTool):
             cmd.append("--verbose")
 
         try:
-            # Run ceregrep CLI
+            # Run ceregrep CLI with timeout
             process = await asyncio.create_subprocess_exec(
                 *cmd,
                 stdout=asyncio.subprocess.PIPE,
@@ -83,7 +88,30 @@ class CeregrepQueryTool(BaseTool):
                 cwd=cwd
             )
 
-            stdout, stderr = await process.communicate()
+            try:
+                stdout, stderr = await asyncio.wait_for(
+                    process.communicate(),
+                    timeout=timeout
+                )
+            except asyncio.TimeoutError:
+                # Kill the process if it times out
+                try:
+                    process.kill()
+                    await process.wait()
+                except:
+                    pass
+
+                return [TextContent(
+                    type="text",
+                    text=(
+                        f"Scout query timed out after {timeout}s. "
+                        f"The query may be too complex or the codebase too large. "
+                        f"Try:\n"
+                        f"- Breaking it into smaller queries\n"
+                        f"- Increasing the timeout parameter\n"
+                        f"- Using more specific search terms"
+                    )
+                )]
 
             if process.returncode != 0:
                 error_msg = stderr.decode() if stderr else "Unknown error"

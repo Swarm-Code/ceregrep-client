@@ -58,7 +58,7 @@ async function connectToServer(
 
   const client = new Client(
     {
-      name: 'ceregrep',
+      name: 'scout',
       version: '0.1.0',
     },
     {
@@ -104,9 +104,9 @@ async function connectToServer(
  * Connect to all configured MCP servers
  */
 export async function connectToAllServers(): Promise<WrappedClient[]> {
-  if (connectedClients) {
-    return connectedClients;
-  }
+  // Always reconnect to get fresh server configuration (don't use cache)
+  // This ensures we pick up config changes without restarting
+  await disconnectAllServers();
 
   const config = await getConfig(process.cwd());
   const servers = config.mcpServers || {};

@@ -1,0 +1,261 @@
+{
+  "request": {
+    "requestId": "15ea8e93-da40-4f27-b2b7-776fb0beb2bc",
+    "requestNumber": 160,
+    "timestamp": "2025-10-24T18:51:39.836Z",
+    "method": "POST",
+    "path": "/v1/chat/completions",
+    "headers": {
+      "content-length": "10891",
+      "accept": "application/json",
+      "content-type": "application/json",
+      "user-agent": "OpenAI/JS 4.104.0",
+      "x-stainless-lang": "js",
+      "x-stainless-package-version": "4.104.0",
+      "x-stainless-os": "Linux",
+      "x-stainless-arch": "x64",
+      "x-stainless-runtime": "node",
+      "x-stainless-runtime-version": "v24.9.0",
+      "authorization": "Bearer csk-f3e6y5t8ppf6h565dhpj3end2n82tdr95pp65m3xtx9vvnmc",
+      "x-stainless-retry-count": "0",
+      "x-stainless-timeout": "15",
+      "accept-encoding": "gzip,deflate",
+      "host": "localhost:8080",
+      "connection": "keep-alive"
+    },
+    "body": {
+      "model": "qwen-3-coder-480b",
+      "messages": [
+        {
+          "role": "system",
+          "content": "You are a helpful AI assistant with access to bash and file search tools.\n\nUse the tools available to help the user accomplish their tasks.\n\n\n\nCRITICAL INSTRUCTION - CONTEXT AND EXPLANATION REQUIREMENTS:\n\n- Give as much context as possible in your responses. It is ALWAYS better to add too much context than too little.\n\n- Use file references with line numbers in the format: filename.ts:123 or path/to/file.py:456\n\n- Explain everything in an ultra explanatory tone, assuming the user needs complete understanding.\n\n- Include specific details: function names, variable names, code snippets, file paths with line numbers.\n\n- When referencing code, ALWAYS include the file path and line number where it can be found.\n\n- Provide thorough explanations of how things work, why they work that way, and what each piece does.\n\n- Word for word: \"Better to add too much context than necessary\" - follow this principle strictly.\n\n\n\nCRITICAL INSTRUCTION - MUST USE TOOLS TO GATHER INFORMATION:\n\n- You MUST use grep to search for information before answering questions about code.\n\n- You CANNOT rely on stored context or prior knowledge about the codebase.\n\n- Everything must be read using tools before giving an explanation.\n\n- This is to ensure that you do not lazily answer questions without verifying current state.\n\n- Always grep for relevant files, read the actual code, and then provide your explanation.\n\n- Never answer based solely on assumptions or memory - always verify with tools first."
+        },
+        {
+          "role": "user",
+          "content": "Previous conversation context:\n\n- User asked: Analyze the complete architecture of the system → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash\n\n[Conversation compacted. Continuing from recent context:]"
+        },
+        {
+          "role": "assistant",
+          "tool_calls": [
+            {
+              "id": "d12bd7291",
+              "type": "function",
+              "function": {
+                "name": "Bash",
+                "arguments": "{\"command\":\"head -50 llm/providers/anthropic.ts\"}"
+              }
+            }
+          ],
+          "content": "Let's examine the Anthropic query implementation:"
+        },
+        {
+          "role": "tool",
+          "tool_call_id": "d12bd7291",
+          "content": "head: cannot open 'llm/providers/anthropic.ts' for reading: No such file or dire\nctory\nExit code 1"
+        },
+        {
+          "role": "assistant",
+          "tool_calls": [
+            {
+              "id": "e4036bf07",
+              "type": "function",
+              "function": {
+                "name": "Bash",
+                "arguments": "{\"command\":\"find . -name \\\"*anthropic*\\\" -type f\"}"
+              }
+            }
+          ],
+          "content": "Let's find the correct path for the Anthropic provider:"
+        },
+        {
+          "role": "tool",
+          "tool_call_id": "e4036bf07",
+          "content": "./llm/anthropic.ts                                                              \n./dist/llm/anthropic.js.map                                                     \n./dist/llm/anthropic.js                                                         \n./dist/llm/anthropic.d.ts.map                                                   \n./dist/llm/anthropic.d.ts"
+        },
+        {
+          "role": "assistant",
+          "tool_calls": [
+            {
+              "id": "b50db6410",
+              "type": "function",
+              "function": {
+                "name": "Bash",
+                "arguments": "{\"command\":\"head -50 llm/anthropic.ts\"}"
+              }
+            }
+          ],
+          "content": "Let's examine the Anthropic implementation:"
+        },
+        {
+          "role": "tool",
+          "tool_call_id": "b50db6410",
+          "content": "inputSchema = zodToJsonSchema(inputSchema as z.ZodType);                  \n    }                                                                           \n                                                                                \n    // Ensure proper format                                                     \n    if (!inputSchema) {                                                         \n      inputSchema = { type: 'object', properties: {} };                         \n    }                                                                           \n                                                                                \n    return {                                                                    \n      name: tool.name,                                                          \n      description: typeof tool.description === 'string' ? tool.description : 'A \ntool',                                                                          \n      input_schema: inputSchema as Anthropic.Tool.InputSchema,                  \n    };                                                                          \n  });                                                                           \n}                                                                               \n                                                                                \n/**                                                                             \n * Calculate cost from usage                                                    \n */                                                                             \nfunction calculateCost(usage: Anthropic.Usage, model: string): number {         \n  const costPerMillionInput = model.includes('haiku') ? 0.8 : SONNET_COST_PER_MI\nLLION_INPUT_TOKENS;                                                             \n  const costPerMillionOutput = model.includes('haiku') ? 4 : SONNET_COST_PER_MIL\nLION_OUTPUT_TOKENS;                                                             \n                                                                                \n  const inputCost = (usage.input_tokens / 1_000_000) * costPerMillionInput;     \n  const outputCost = (usage.output_tokens / 1_000_000) * costPerMillionOutput;"
+        },
+        {
+          "role": "assistant",
+          "tool_calls": [
+            {
+              "id": "ff1a3f621",
+              "type": "function",
+              "function": {
+                "name": "Bash",
+                "arguments": "{\"command\":\"head -20 llm/anthropic.ts\"}"
+              }
+            }
+          ],
+          "content": "Let's look at the beginning of the Anthropic file to understand its imports and setup:"
+        },
+        {
+          "role": "tool",
+          "tool_call_id": "ff1a3f621",
+          "content": "/**                                                                             \n * Anthropic LLM Client                                                         \n * Simplified from swarm-client/services/claude.ts                              \n */                                                                             \n                                                                                \nimport Anthropic from '@anthropic-ai/sdk';                                      \nimport { randomUUID } from 'crypto';                                            \nimport { Tool } from '../core/tool.js';                                         \nimport { AssistantMessage, UserMessage, NormalizedMessage } from '../core/messag\nes.js';                                                                         \nimport { z } from 'zod';                                                        \nimport { zodToJsonSchema } from 'zod-to-json-schema';                           \n                                                                                \nconst SONNET_COST_PER_MILLION_INPUT_TOKENS = 3;                                 \nconst SONNET_COST_PER_MILLION_OUTPUT_TOKENS = 15;                               \n                                                                                \n/**                                                                             \n * Format tools for Anthropic API                                               \n */                                                                             \nfunction formatToolsForAPI(tools: Tool[]): Anthropic.Tool[] {                   \n  return tools.map((tool) => {"
+        },
+        {
+          "role": "assistant",
+          "tool_calls": [
+            {
+              "id": "c9b6c9118",
+              "type": "function",
+              "function": {
+                "name": "Grep",
+                "arguments": "{\"pattern\":\"export async function queryAnthropic\",\"path\":\"llm/anthropic.ts\"}"
+              }
+            }
+          ],
+          "content": "Let's look at the query function in the Anthropic file:"
+        },
+        {
+          "role": "tool",
+          "tool_call_id": "c9b6c9118",
+          "content": "No files found"
+        }
+      ],
+      "temperature": 0.7,
+      "top_p": 0.8,
+      "tools": [
+        {
+          "type": "function",
+          "function": {
+            "name": "Bash",
+            "description": "Tool: Bash",
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "command": {
+                  "type": "string",
+                  "description": "The command to execute"
+                },
+                "timeout": {
+                  "type": "number",
+                  "description": "Optional timeout in milliseconds (max 600000)"
+                }
+              },
+              "required": [
+                "command"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        {
+          "type": "function",
+          "function": {
+            "name": "Grep",
+            "description": "Tool: Grep",
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "pattern": {
+                  "type": "string",
+                  "description": "The regular expression pattern to search for in file contents"
+                },
+                "path": {
+                  "type": "string",
+                  "description": "The directory to search in. Defaults to the current working directory."
+                },
+                "include": {
+                  "type": "string",
+                  "description": "File pattern to include in the search (e.g. \"*.ts\", \"*.{ts,tsx}\")"
+                }
+              },
+              "required": [
+                "pattern"
+              ],
+              "additionalProperties": false
+            }
+          }
+        }
+      ],
+      "tool_choice": "auto"
+    },
+    "bodySize": 10841
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "date": "Fri, 24 Oct 2025 18:51:40 GMT",
+      "content-type": "application/json",
+      "transfer-encoding": "chunked",
+      "connection": "keep-alive",
+      "server": "cloudflare",
+      "x-request-id": "993baab64dec41bf-ATL",
+      "x-ratelimit-limit-requests-day": "172800",
+      "x-ratelimit-limit-tokens-minute": "1500000",
+      "x-ratelimit-remaining-requests-day": "170711",
+      "x-ratelimit-remaining-tokens-minute": "1366499",
+      "x-ratelimit-reset-requests-day": "18499.931819677353",
+      "x-ratelimit-reset-tokens-minute": "19.931819677352905",
+      "inference-id": "chatcmpl-49a4c275-062e-42ad-a1ad-e977838ffcfb",
+      "referrer-policy": "strict-origin-when-cross-origin",
+      "x-content-type-options": "nosniff",
+      "strict-transport-security": "max-age=3600; includeSubDomains",
+      "cf-cache-status": "DYNAMIC",
+      "set-cookie": "__cf_bm=nhgOYX_wkIokFkFk4Lv5YKK7bFIXYZCiFeexuDt_.WE-1761331899.8854978-1.0.1.1-YhKbhqrEF2buOF4NBjgRyX9z3Ossbz6GzYwBTAqH0WJ5meglBYHUc_R7PORi7q7QFtBitIfL97r5g28ZrBnfaI070uXDqbNjYB7ctugtyTFJ2dI8NmW52nGXK.Ad9ye0; HttpOnly; Secure; Path=/; Expires=Fri, 24 Oct 2025 19:21:40 GMT",
+      "cf-ray": "993baab64dec41bf-ATL",
+      "alt-svc": "h3=\":443\"; ma=86400"
+    },
+    "body": {
+      "id": "chatcmpl-49a4c275-062e-42ad-a1ad-e977838ffcfb",
+      "choices": [
+        {
+          "finish_reason": "tool_calls",
+          "index": 0,
+          "message": {
+            "content": "Let's search for the main query function in the Anthropic file:\n\n",
+            "tool_calls": [
+              {
+                "id": "2710ba899",
+                "type": "function",
+                "function": {
+                  "name": "Grep",
+                  "arguments": "{\"pattern\": \"async function query\", \"path\": \"llm/anthropic.ts\"}"
+                }
+              }
+            ],
+            "role": "assistant"
+          }
+        }
+      ],
+      "created": 1761331897,
+      "model": "qwen-3-coder-480b",
+      "system_fingerprint": "fp_386b539e7b02ce3613b7",
+      "object": "chat.completion",
+      "usage": {
+        "prompt_tokens": 1779,
+        "completion_tokens": 52,
+        "total_tokens": 1831,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        }
+      },
+      "time_info": {
+        "queue_time": 0.00012374,
+        "prompt_time": 0.031233499,
+        "completion_time": 0.028323133,
+        "total_time": 0.06129050254821777,
+        "created": 1761331897.4361858
+      }
+    },
+    "duration": 283
+  }
+}

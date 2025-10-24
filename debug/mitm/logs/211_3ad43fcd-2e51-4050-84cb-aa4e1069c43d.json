@@ -1,0 +1,261 @@
+{
+  "request": {
+    "requestId": "3ad43fcd-2e51-4050-84cb-aa4e1069c43d",
+    "requestNumber": 211,
+    "timestamp": "2025-10-24T18:52:59.778Z",
+    "method": "POST",
+    "path": "/v1/chat/completions",
+    "headers": {
+      "content-length": "16325",
+      "accept": "application/json",
+      "content-type": "application/json",
+      "user-agent": "OpenAI/JS 4.104.0",
+      "x-stainless-lang": "js",
+      "x-stainless-package-version": "4.104.0",
+      "x-stainless-os": "Linux",
+      "x-stainless-arch": "x64",
+      "x-stainless-runtime": "node",
+      "x-stainless-runtime-version": "v24.9.0",
+      "authorization": "Bearer csk-f3e6y5t8ppf6h565dhpj3end2n82tdr95pp65m3xtx9vvnmc",
+      "x-stainless-retry-count": "0",
+      "x-stainless-timeout": "15",
+      "accept-encoding": "gzip,deflate",
+      "host": "localhost:8080",
+      "connection": "keep-alive"
+    },
+    "body": {
+      "model": "qwen-3-coder-480b",
+      "messages": [
+        {
+          "role": "system",
+          "content": "You are a helpful AI assistant with access to bash and file search tools.\n\nUse the tools available to help the user accomplish their tasks.\n\n\n\nCRITICAL INSTRUCTION - CONTEXT AND EXPLANATION REQUIREMENTS:\n\n- Give as much context as possible in your responses. It is ALWAYS better to add too much context than too little.\n\n- Use file references with line numbers in the format: filename.ts:123 or path/to/file.py:456\n\n- Explain everything in an ultra explanatory tone, assuming the user needs complete understanding.\n\n- Include specific details: function names, variable names, code snippets, file paths with line numbers.\n\n- When referencing code, ALWAYS include the file path and line number where it can be found.\n\n- Provide thorough explanations of how things work, why they work that way, and what each piece does.\n\n- Word for word: \"Better to add too much context than necessary\" - follow this principle strictly.\n\n\n\nCRITICAL INSTRUCTION - MUST USE TOOLS TO GATHER INFORMATION:\n\n- You MUST use grep to search for information before answering questions about code.\n\n- You CANNOT rely on stored context or prior knowledge about the codebase.\n\n- Everything must be read using tools before giving an explanation.\n\n- This is to ensure that you do not lazily answer questions without verifying current state.\n\n- Always grep for relevant files, read the actual code, and then provide your explanation.\n\n- Never answer based solely on assumptions or memory - always verify with tools first."
+        },
+        {
+          "role": "user",
+          "content": "Previous conversation context:\n\n- User asked: Analyze the complete architecture of the system → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Grep → Assistant used tools: Grep → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Grep → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Grep → Assistant used tools: Bash → Assistant used tools: Grep → Assistant used tools: Bash → Assistant used tools: Grep → Assistant used tools: Grep → Assistant used tools: Grep → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Grep → Assistant used tools: Bash → Assistant used tools: Grep → Assistant used tools: Bash → Assistant used tools: Grep → Assistant used tools: Grep → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash\n\n[Conversation compacted. Continuing from recent context:]"
+        },
+        {
+          "role": "assistant",
+          "tool_calls": [
+            {
+              "id": "0c6a8ebd7",
+              "type": "function",
+              "function": {
+                "name": "Bash",
+                "arguments": "{\"command\":\"grep -n -A 15 \\\"ToolUseBlock\\\" claude-code-template/query.ts\"}"
+              }
+            }
+          ],
+          "content": "Let's check the query.ts file since it's likely part of the local codebase:"
+        },
+        {
+          "role": "tool",
+          "tool_call_id": "0c6a8ebd7",
+          "content": "271-  shouldSkipPermissionCheck?: boolean,                                      \n272-): AsyncGenerator<Message, void> {                                          \n273-  for (const toolUse of toolUseMessages) {                                  \n274-    yield* runToolUse(                                                      \n275-      toolUse,                                                              \n276-      new Set(toolUseMessages.map(_ => _.id)),                              \n277-      assistantMessage,                                                     \n278-      canUseTool,                                                           \n279-      toolUseContext,                                                       \n280-      shouldSkipPermissionCheck,                                            \n281-    )                                                                       \n282-  }                                                                         \n--                                                                              \n286:  toolUse: ToolUseBlock,                                                    \n287-  siblingToolUseIDs: Set<string>,                                           \n288-  assistantMessage: AssistantMessage,                                       \n289-  canUseTool: CanUseToolFn,                                                 \n290-  toolUseContext: ToolContext,                                              \n291-  shouldSkipPermissionCheck?: boolean,                                      \n292-): AsyncGenerator<Message, void> {                                          \n293-  const toolName = toolUse.name                                             \n294-  const tool = toolUseContext.options.tools.find(t => t.name === toolName)  \n295-                                                                            \n296-  // Check if the tool exists                                               \n297-  if (!tool) {                                                              \n298-    logEvent('tengu_tool_use_error', {                                      \n299-      error: `No such tool available: ${toolName}`,                         \n300-      messageID: assistantMessage.message.id,                               \n301-      toolName,"
+        },
+        {
+          "role": "assistant",
+          "tool_calls": [
+            {
+              "id": "bac848ca6",
+              "type": "function",
+              "function": {
+                "name": "Bash",
+                "arguments": "{\"command\":\"grep -n -A 15 \\\"interface ToolUseBlock\\\" claude-code-template/node_modules/@anthropic-ai/sdk/src/resources/messages/messages.ts\"}"
+              }
+            }
+          ],
+          "content": "Let's look for the ToolUseBlock type definition in the Anthropic SDK files:"
+        },
+        {
+          "role": "tool",
+          "tool_call_id": "bac848ca6",
+          "content": "1070:export interface ToolUseBlock {                                            \n1071-  id: string;                                                              \n1072-                                                                           \n1073-  input: unknown;                                                          \n1074-                                                                           \n1075-  name: string;                                                            \n1076-                                                                           \n1077-  type: 'tool_use';                                                        \n1078-}                                                                          \n1079-                                                                           \n1080:export interface ToolUseBlockParam {                                       \n1081-  id: string;                                                              \n1082-                                                                           \n1083-  input: unknown;                                                          \n1084-                                                                           \n1085-  name: string;                                                            \n1086-                                                                           \n1087-  type: 'tool_use';                                                        \n1088-                                                                           \n1089-  /**                                                                      \n1090-   * Create a cache control breakpoint at this content block.              \n1091-   */                                                                      \n1092-  cache_control?: CacheControlEphemeral | null;                            \n1093-}                                                                          \n1094-                                                                           \n1095-export interface URLImageSource {"
+        },
+        {
+          "role": "assistant",
+          "tool_calls": [
+            {
+              "id": "09b687ed7",
+              "type": "function",
+              "function": {
+                "name": "Bash",
+                "arguments": "{\"command\":\"grep -n -B 5 -A 10 \\\"toolUse: ToolUseBlock\\\" claude-code-template/query.ts\"}"
+              }
+            }
+          ],
+          "content": "Now let's look at how the ToolUseBlock is being used in the query.ts file:"
+        },
+        {
+          "role": "tool",
+          "tool_call_id": "09b687ed7",
+          "content": "281-    )                                                                       \n282-  }                                                                         \n283-}                                                                           \n284-                                                                            \n285-export async function* runToolUse(                                          \n286:  toolUse: ToolUseBlock,                                                    \n287-  siblingToolUseIDs: Set<string>,                                           \n288-  assistantMessage: AssistantMessage,                                       \n289-  canUseTool: CanUseToolFn,                                                 \n290-  toolUseContext: ToolContext,                                              \n291-  shouldSkipPermissionCheck?: boolean,                                      \n292-): AsyncGenerator<Message, void> {                                          \n293-  const toolName = toolUse.name                                             \n294-  const tool = toolUseContext.options.tools.find(t => t.name === toolName)  \n295-                                                                            \n296-  // Check if the tool exists"
+        },
+        {
+          "role": "assistant",
+          "tool_calls": [
+            {
+              "id": "74655f3b9",
+              "type": "function",
+              "function": {
+                "name": "Bash",
+                "arguments": "{\"command\":\"grep -n \\\"import.*ToolUseBlock\\\" claude-code-template/query.ts\"}"
+              }
+            }
+          ],
+          "content": "Let's check the import statements in query.ts to see where ToolUseBlock is imported from:"
+        },
+        {
+          "role": "tool",
+          "tool_call_id": "74655f3b9",
+          "content": "Exit code 1"
+        },
+        {
+          "role": "assistant",
+          "tool_calls": [
+            {
+              "id": "523f51eaf",
+              "type": "function",
+              "function": {
+                "name": "Bash",
+                "arguments": "{\"command\":\"head -30 claude-code-template/query.ts\"}"
+              }
+            }
+          ],
+          "content": "Let's check the import statements at the top of the query.ts file:"
+        },
+        {
+          "role": "tool",
+          "tool_call_id": "523f51eaf",
+          "content": "Message as APIAssistantMessage,                                               \n  MessageParam,                                                                 \n  ToolUseBlock,                                                                 \n} from '@anthropic-ai/sdk/resources/index.mjs'                                  \nimport { UUID } from 'crypto'                                                   \nimport type { Tool, ToolContext } from './Tool.js'                              \nimport {                                                                        \n  messagePairValidForBinaryFeedback,                                            \n  shouldUseBinaryFeedback,                                                      \n} from './components/binary-feedback/utils.js'                                  \nimport { CanUseToolFn } from './hooks/useCanUseTool.js'                         \nimport {                                                                        \n  formatSystemPromptWithContext,                                                \n  querySonnet,                                                                  \n} from './services/claude.js'                                                   \nimport { logEvent } from './services/statsig.js'                                \nimport { all } from './utils/generators.js'                                     \nimport { logError } from './utils/log.js'                                       \nimport {                                                                        \n  createAssistantMessage,                                                       \n  createProgressMessage,                                                        \n  createToolResultStopMessage,                                                  \n  createUserMessage,                                                            \n  FullToolUseResult,                                                            \n  INTERRUPT_MESSAGE,                                                            \n  INTERRUPT_MESSAGE_FOR_TOOL_USE,                                               \n  NormalizedMessage,                                                            \n  normalizeMessagesForAPI,                                                      \n} from './utils/messages.js'"
+        }
+      ],
+      "temperature": 0.7,
+      "top_p": 0.8,
+      "tools": [
+        {
+          "type": "function",
+          "function": {
+            "name": "Bash",
+            "description": "Tool: Bash",
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "command": {
+                  "type": "string",
+                  "description": "The command to execute"
+                },
+                "timeout": {
+                  "type": "number",
+                  "description": "Optional timeout in milliseconds (max 600000)"
+                }
+              },
+              "required": [
+                "command"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        {
+          "type": "function",
+          "function": {
+            "name": "Grep",
+            "description": "Tool: Grep",
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "pattern": {
+                  "type": "string",
+                  "description": "The regular expression pattern to search for in file contents"
+                },
+                "path": {
+                  "type": "string",
+                  "description": "The directory to search in. Defaults to the current working directory."
+                },
+                "include": {
+                  "type": "string",
+                  "description": "File pattern to include in the search (e.g. \"*.ts\", \"*.{ts,tsx}\")"
+                }
+              },
+              "required": [
+                "pattern"
+              ],
+              "additionalProperties": false
+            }
+          }
+        }
+      ],
+      "tool_choice": "auto"
+    },
+    "bodySize": 16173
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "date": "Fri, 24 Oct 2025 18:53:00 GMT",
+      "content-type": "application/json",
+      "transfer-encoding": "chunked",
+      "connection": "keep-alive",
+      "server": "cloudflare",
+      "x-request-id": "993bacaa59c5a38b-ATL",
+      "x-ratelimit-limit-requests-day": "172800",
+      "x-ratelimit-limit-tokens-minute": "1500000",
+      "x-ratelimit-remaining-requests-day": "170660",
+      "x-ratelimit-remaining-tokens-minute": "1500000",
+      "x-ratelimit-reset-requests-day": "18419.840126991272",
+      "x-ratelimit-reset-tokens-minute": "59.84012699127197",
+      "inference-id": "chatcmpl-38e75dbe-dbeb-4228-a2e0-b08ce3ecd522",
+      "referrer-policy": "strict-origin-when-cross-origin",
+      "x-content-type-options": "nosniff",
+      "strict-transport-security": "max-age=3600; includeSubDomains",
+      "cf-cache-status": "DYNAMIC",
+      "set-cookie": "__cf_bm=Bno7O5LrzXWWJNgoXWEv5f7fmz7DuJk7MYA596Fyr8M-1761331979.8973007-1.0.1.1-xp3epWl0t76GIo1YROZZqwQ0aoEsJ_OL5O012VUpKK.e80v0sE37e9NZpcaZ71T8hDEdC2m1ngbCpbyi0X1cOtS3.CNkapPXMqd7nmqT2rvBI2kGauq1F7WdU7lB6Qfh; HttpOnly; Secure; Path=/; Expires=Fri, 24 Oct 2025 19:23:00 GMT",
+      "cf-ray": "993bacaa59c5a38b-ATL",
+      "alt-svc": "h3=\":443\"; ma=86400"
+    },
+    "body": {
+      "id": "chatcmpl-38e75dbe-dbeb-4228-a2e0-b08ce3ecd522",
+      "choices": [
+        {
+          "finish_reason": "tool_calls",
+          "index": 0,
+          "message": {
+            "content": "Let's check the ToolContext type definition:\n\n",
+            "tool_calls": [
+              {
+                "id": "0c6fb3c39",
+                "type": "function",
+                "function": {
+                  "name": "Bash",
+                  "arguments": "{\"command\": \"grep -n -A 10 \\\"interface ToolContext\\\" claude-code-template/Tool.ts\"}"
+                }
+              }
+            ],
+            "role": "assistant"
+          }
+        }
+      ],
+      "created": 1761331980,
+      "model": "qwen-3-coder-480b",
+      "system_fingerprint": "fp_386b539e7b02ce3613b7",
+      "object": "chat.completion",
+      "usage": {
+        "prompt_tokens": 2710,
+        "completion_tokens": 50,
+        "total_tokens": 2760,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        }
+      },
+      "time_info": {
+        "queue_time": 0.000179071,
+        "prompt_time": 0.045579484,
+        "completion_time": 0.030710131,
+        "total_time": 0.07805824279785156,
+        "created": 1761331980.0440946
+      }
+    },
+    "duration": 493
+  }
+}

@@ -82,8 +82,28 @@ export const BashTool: Tool = {
       if (stderr) errorMessage += EOL;
       errorMessage += '<error>Command was aborted before completion</error>';
     }
-    const trimmedStdout = stdout.trim();
+    let trimmedStdout = stdout.trim();
     const trimmedStderr = errorMessage.trim();
+
+    // OUTPUT SUMMARIZATION: Prevent excessively long outputs from bloating context
+    // This helps prevent 400 errors from Cerebras API due to oversized requests
+    const MAX_OUTPUT_LENGTH = 10000; // 10K chars - balance between context and size
+    if (trimmedStdout.length > MAX_OUTPUT_LENGTH) {
+      const headLength = Math.floor(MAX_OUTPUT_LENGTH * 0.3); // First 30%
+      const tailLength = Math.floor(MAX_OUTPUT_LENGTH * 0.7); // Last 70%
+      const omittedChars = trimmedStdout.length - MAX_OUTPUT_LENGTH;
+      const omittedLines = (trimmedStdout.match(/\n/g) || []).length -
+                          (trimmedStdout.substring(0, headLength).match(/\n/g) || []).length -
+                          (trimmedStdout.substring(trimmedStdout.length - tailLength).match(/\n/g) || []).length;
+
+      trimmedStdout =
+        trimmedStdout.substring(0, headLength) +
+        `\n\n... [Output truncated: ${omittedChars.toLocaleString()} chars and ~${omittedLines} lines omitted] ...\n\n` +
+        trimmedStdout.substring(trimmedStdout.length - tailLength);
+
+      console.error(`⚠️  [Output Summarization] Truncated bash output from ${stdout.length.toLocaleString()} to ${trimmedStdout.length.toLocaleString()} chars`);
+    }
+
     const hasBoth = trimmedStdout && trimmedStderr;
     const result = `${trimmedStdout}${hasBoth ? '\n' : ''}${trimmedStderr}`;
 

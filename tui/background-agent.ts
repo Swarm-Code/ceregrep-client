@@ -118,8 +118,9 @@ export class BackgroundAgent {
         return 'New Conversation';
       }
 
-      // Ask background agent to generate title
+      // Ask background agent to generate title (SDK is stateless, pass empty history)
       const result = await this.client.query(
+        [],
         `Generate a short, descriptive title (max 5 words) for a conversation about: "${userMessages.slice(0, 200)}". Reply with ONLY the title, nothing else.`,
         {
           systemPrompt: [
