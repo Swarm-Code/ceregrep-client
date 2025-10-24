@@ -21,16 +21,15 @@ export class StreamRenderer {
    * Start the initial query spinner
    */
   startQuery() {
+    // Don't show spinner in clean mode unless verbose
     if (this.verbose) {
       this.spinner = ora({
         text: chalk.blue('Initializing agent...'),
         color: 'cyan',
       }).start();
     } else {
-      this.spinner = ora({
-        text: chalk.blue('Processing...'),
-        color: 'cyan',
-      }).start();
+      // Silent mode - no spinner initially
+      this.spinner = null;
     }
   }
 
@@ -38,9 +37,8 @@ export class StreamRenderer {
    * Show the user's prompt with formatting
    */
   showPrompt(prompt: string) {
-    console.log();
     console.log(chalk.bold.blueBright('Prompt:'), chalk.white(prompt));
-    console.log();
+    console.log(); // Single line break after prompt
   }
 
   /**
@@ -74,11 +72,25 @@ export class StreamRenderer {
       ? message.message.content
       : [message.message.content];
 
-    // Extract tool use blocks
+    // Extract tool use blocks and text blocks
     const toolUseBlocks = content.filter((c: any) => c.type === 'tool_use');
+    const textBlocks = content.filter((c: any) => c.type === 'text');
+
+    // If there's text content but no tools, clear the line if we had shown tools
+    if (textBlocks.length > 0 && toolUseBlocks.length === 0) {
+      if (this.currentToolCount > 0) {
+        // Clear the line
+        process.stdout.write('\r' + ' '.repeat(process.stdout.columns || 80) + '\r');
+        this.currentToolCount = 0;
+      }
+      // Don't display text here - let the final response handler do it
+      return;
+    }
 
     if (toolUseBlocks.length > 0) {
-      // Update spinner with ghost hints
+      this.currentToolCount = toolUseBlocks.length;
+
+      // Create tool execution display
       const toolNames = toolUseBlocks.map((t: any) => {
         const toolName = t.name;
         const input = t.input;
@@ -88,17 +100,20 @@ export class StreamRenderer {
           const cmd = input.command.length > 40
             ? input.command.substring(0, 40) + '...'
             : input.command;
-          return chalk.dim(`bash: ${cmd}`);
+          return chalk.gray(`${cmd}`);
         } else if (toolName === 'Grep' && input.pattern) {
-          return chalk.dim(`grep: ${input.pattern}`);
+          const pattern = input.pattern.length > 30
+            ? input.pattern.substring(0, 30) + '...'
+            : input.pattern;
+          return chalk.gray(`grep "${pattern}"`);
         } else {
-          return chalk.dim(toolName);
+          return chalk.gray(toolName.toLowerCase());
         }
-      }).join(chalk.dim(', '));
+      }).join(chalk.gray(' → '));
 
-      if (this.spinner) {
-        this.spinner.text = chalk.blue('Processing... ') + chalk.dim('[') + toolNames + chalk.dim(']');
-      }
+      // Write tool execution on same line
+      const toolLine = chalk.gray('⚡ ') + toolNames;
+      process.stdout.write('\r' + toolLine);
     }
   }
 
@@ -263,13 +278,24 @@ export class StreamRenderer {
    * Show final synthesized response with formatting
    */
   showFinalResponse() {
-    console.log();
-    console.log(chalk.bold.greenBright('Response:'));
-    console.log();
+    // Stop spinner if active before showing response
+    if (this.spinner) {
+      this.spinner.stop();
+      this.spinner = null;
+    }
 
     const response = this.synthesizeResponse();
-    console.log(chalk.white(response));
-    console.log();
+
+    // Just show the response without label in clean mode
+    if (!this.verbose) {
+      console.log(response);
+    } else {
+      console.log();
+      console.log(chalk.bold.greenBright('Response:'));
+      console.log();
+      console.log(chalk.white(response));
+      console.log();
+    }
   }
 
   /**

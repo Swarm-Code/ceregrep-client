@@ -147,6 +147,7 @@ export const App: React.FC<AppProps> = ({ initialConversationId, initialAgentId,
         if (conv) {
           setConversation(conv);
           setAgentId(conv.agentId);
+          // SDK is stateless - no need to sync history
         }
       });
     }
@@ -405,17 +406,27 @@ export const App: React.FC<AppProps> = ({ initialConversationId, initialAgentId,
         systemPrompt: fullPrompt,
       };
 
-      // Stream response and update UI in real-time (like ceregrep query)
-      for await (const message of client.queryStream(messageContent, queryOptions)) {
-        // Get current history from client after each message
-        const currentHistory = client.getHistory();
+      // Get current conversation messages (TUI owns this state, like Claude Code)
+      const currentMessages = currentBranch?.messages || [];
 
-        // Update current branch's messages
+      // Collection for ALL new messages from this query
+      const newMessages: Message[] = [];
+
+      // Execute query with STATELESS SDK
+      // Show messages in REAL-TIME as they stream (users want to see progress!)
+      for await (const message of client.queryStream(currentMessages, messageContent, queryOptions)) {
+        // Add to collection
+        newMessages.push(message);
+
+        // Update state IN REAL-TIME so users can see messages as they arrive
+        // This is what makes the UI feel responsive!
         setConversation(prev => {
           const branch = prev.branches.get(prev.currentBranchId);
           if (!branch) return prev;
 
-          const updatedBranch = { ...branch, messages: currentHistory };
+          // Append all messages collected so far
+          const updatedMessages = [...currentMessages, ...newMessages];
+          const updatedBranch = { ...branch, messages: updatedMessages };
           const newBranches = new Map(prev.branches);
           newBranches.set(prev.currentBranchId, updatedBranch);
 
@@ -426,34 +437,17 @@ export const App: React.FC<AppProps> = ({ initialConversationId, initialAgentId,
         });
       }
 
-      // Get final complete history from client after streaming completes
-      const fullHistory = client.getHistory();
-
-      // Update conversation with complete history from client
-      setConversation(prev => {
-        const branch = prev.branches.get(prev.currentBranchId);
-        if (!branch) return prev;
-
-        const updatedBranch = { ...branch, messages: fullHistory };
-        const newBranches = new Map(prev.branches);
-        newBranches.set(prev.currentBranchId, updatedBranch);
-
-        const finalConversation = {
-          ...prev,
-          branches: newBranches,
-        };
-
-        return finalConversation;
-      });
-
       // Save updated conversation
       await saveConversation(conversation);
 
+      // Get the updated messages for title generation
+      const updatedMessages = [...currentMessages, ...newMessages];
+
       // Auto-generate conversation title if this is the first user message
-      const userMessageCount = fullHistory.filter(m => m.type === 'user').length;
+      const userMessageCount = updatedMessages.filter((m: Message) => m.type === 'user').length;
       if (userMessageCount === 1 && conversation.title === 'New Conversation') {
         // Generate title in the background (don't block UI)
-        backgroundAgent.generateConversationTitle(fullHistory).then(title => {
+        backgroundAgent.generateConversationTitle(updatedMessages).then(title => {
           if (title && title !== 'New Conversation') {
             setConversation(prev => ({ ...prev, title }));
             saveConversation({ ...conversation, title });
@@ -485,16 +479,14 @@ export const App: React.FC<AppProps> = ({ initialConversationId, initialAgentId,
 
     switch (command) {
       case '/new':
-        // Create new conversation and clear client history
+        // Create new conversation (TUI owns all state, SDK is stateless)
         const newConv = createBranchedConversation(args.join(' ') || 'New Conversation', agentId);
         setConversation(newConv);
         await saveConversation(newConv);
         conversationStartTime.current = Date.now(); // Reset timer
         setNavigationIndex(null);
         setIsHistoricalView(false);
-        if (client) {
-          client.clearHistory();
-        }
+        // SDK is now stateless - no need to clear history
         break;
 
       case '/agent':
@@ -553,11 +545,7 @@ export const App: React.FC<AppProps> = ({ initialConversationId, initialAgentId,
             setNavigationIndex(null);
             setIsHistoricalView(false);
             await saveConversation(forked);
-            // Clear and reload client history
-            if (client) {
-              client.clearHistory();
-              // TODO: Repopulate from branch messages
-            }
+            // SDK is stateless - no need to manage history
           } catch (err) {
             setError(err instanceof Error ? err.message : String(err));
           }
@@ -595,9 +583,14 @@ export const App: React.FC<AppProps> = ({ initialConversationId, initialAgentId,
         break;
 
       case '/compact':
-        // Compact conversation history (summarize and keep recent messages)
+        // Compact conversation history (user-initiated like Claude Code)
         if (!client || !currentBranch) {
           setError('Client not initialized or no current branch');
+          break;
+        }
+
+        if (currentBranch.messages.length < 10) {
+          setError('Not enough messages to compact (need at least 10)');
           break;
         }
 
@@ -605,16 +598,20 @@ export const App: React.FC<AppProps> = ({ initialConversationId, initialAgentId,
           setIsStreaming(true);
           setError('Compacting conversation...');
 
-          // Call compact method on client
-          await client.compact();
+          // Use SDK's compactConversation helper (matches Claude Code pattern exactly)
+          // This returns ONLY the summary messages - no recent messages kept
+          const compactedMessages = await client.compactConversation(
+            currentBranch.messages
+          );
 
-          // Update current branch with compacted history
-          const compactedHistory = client.getHistory();
+          // Create new conversation with JUST the summary (like Claude Code)
+          // Start completely fresh, don't keep recent messages
+
           setConversation(prev => {
             const branch = prev.branches.get(prev.currentBranchId);
             if (!branch) return prev;
 
-            const updatedBranch = { ...branch, messages: compactedHistory };
+            const updatedBranch = { ...branch, messages: compactedMessages };
             const newBranches = new Map(prev.branches);
             newBranches.set(prev.currentBranchId, updatedBranch);
 
@@ -654,9 +651,7 @@ export const App: React.FC<AppProps> = ({ initialConversationId, initialAgentId,
         conversationStartTime.current = Date.now(); // Reset timer
         setNavigationIndex(null);
         setIsHistoricalView(false);
-        if (client) {
-          client.clearHistory();
-        }
+        // SDK is stateless - no need to clear history
         break;
 
       case '/exit':
@@ -678,11 +673,8 @@ export const App: React.FC<AppProps> = ({ initialConversationId, initialAgentId,
       setConversation(conv);
       setAgentId(conv.agentId);
       setView('chat');
-      // Clear client history when switching conversations
-      // The client will be reinitialized if agent changed
-      if (client && conv.agentId === agentId) {
-        client.clearHistory();
-      }
+      // SDK is now stateless - TUI owns all conversation state
+      // No need to sync with client as it doesn't maintain history
     }
   };
 
@@ -712,11 +704,7 @@ export const App: React.FC<AppProps> = ({ initialConversationId, initialAgentId,
       await saveConversation(switched);
       setView('chat');
 
-      // Clear and reload client history
-      if (client) {
-        client.clearHistory();
-        // TODO: Repopulate from branch messages
-      }
+      // SDK is stateless - no need to manage history
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     }
@@ -761,15 +749,8 @@ export const App: React.FC<AppProps> = ({ initialConversationId, initialAgentId,
     const newClient = new CeregrepClient(clientConfig);
     await newClient.initialize();
 
-    // Transfer history to new client
-    const currentHistory = client.getHistory();
-    for (const message of currentHistory) {
-      if (message.type === 'user') {
-        newClient['messages'].push(message);
-      } else if (message.type === 'assistant') {
-        newClient['messages'].push(message);
-      }
-    }
+    // SDK is stateless - history is managed by TUI
+    // No need to transfer history between clients
 
     setClient(newClient);
   };

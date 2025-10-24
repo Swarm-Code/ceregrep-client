@@ -1,0 +1,223 @@
+{
+  "request": {
+    "requestId": "c7cdf01b-5ae7-4265-bd8d-07f7c6e03da7",
+    "requestNumber": 133,
+    "timestamp": "2025-10-24T18:51:19.507Z",
+    "method": "POST",
+    "path": "/v1/chat/completions",
+    "headers": {
+      "content-length": "10049",
+      "accept": "application/json",
+      "content-type": "application/json",
+      "user-agent": "OpenAI/JS 4.104.0",
+      "x-stainless-lang": "js",
+      "x-stainless-package-version": "4.104.0",
+      "x-stainless-os": "Linux",
+      "x-stainless-arch": "x64",
+      "x-stainless-runtime": "node",
+      "x-stainless-runtime-version": "v24.9.0",
+      "authorization": "Bearer csk-f3e6y5t8ppf6h565dhpj3end2n82tdr95pp65m3xtx9vvnmc",
+      "x-stainless-retry-count": "0",
+      "x-stainless-timeout": "15",
+      "accept-encoding": "gzip,deflate",
+      "host": "localhost:8080",
+      "connection": "keep-alive"
+    },
+    "body": {
+      "model": "qwen-3-coder-480b",
+      "messages": [
+        {
+          "role": "system",
+          "content": "You are a helpful AI assistant with access to bash and file search tools.\n\nUse the tools available to help the user accomplish their tasks.\n\n\n\nCRITICAL INSTRUCTION - CONTEXT AND EXPLANATION REQUIREMENTS:\n\n- Give as much context as possible in your responses. It is ALWAYS better to add too much context than too little.\n\n- Use file references with line numbers in the format: filename.ts:123 or path/to/file.py:456\n\n- Explain everything in an ultra explanatory tone, assuming the user needs complete understanding.\n\n- Include specific details: function names, variable names, code snippets, file paths with line numbers.\n\n- When referencing code, ALWAYS include the file path and line number where it can be found.\n\n- Provide thorough explanations of how things work, why they work that way, and what each piece does.\n\n- Word for word: \"Better to add too much context than necessary\" - follow this principle strictly.\n\n\n\nCRITICAL INSTRUCTION - MUST USE TOOLS TO GATHER INFORMATION:\n\n- You MUST use grep to search for information before answering questions about code.\n\n- You CANNOT rely on stored context or prior knowledge about the codebase.\n\n- Everything must be read using tools before giving an explanation.\n\n- This is to ensure that you do not lazily answer questions without verifying current state.\n\n- Always grep for relevant files, read the actual code, and then provide your explanation.\n\n- Never answer based solely on assumptions or memory - always verify with tools first."
+        },
+        {
+          "role": "user",
+          "content": "Analyze the complete architecture of the system"
+        },
+        {
+          "role": "assistant",
+          "tool_calls": [
+            {
+              "id": "be8ec1228",
+              "type": "function",
+              "function": {
+                "name": "Bash",
+                "arguments": "{\"command\":\"find . -type f -not -path \\\"*/node_modules/*\\\" -not -path \\\"*/.git/*\\\" | head -50\"}"
+              }
+            }
+          ],
+          "content": "I'll analyze the complete architecture of the system by exploring its structure, components, and relationships. Let me start by examining the files and directories to understand the overall layout."
+        },
+        {
+          "role": "tool",
+          "tool_call_id": "be8ec1228",
+          "content": "./llm/cerebras.ts                                                               \n./mcp-server/ceregrep_mcp/tools/__pycache__/__init__.cpython-313.pyc            \n./mcp-server/ceregrep_mcp/tools/__pycache__/base_tool.cpython-313.pyc           \n./mcp-server/ceregrep_mcp/tools/__pycache__/ceregrep_query_tool.cpython-313.pyc \n./mcp-server/ceregrep_mcp/tools/__pycache__/agent_tools.cpython-313.pyc         \n./mcp-server/ceregrep_mcp/__pycache__/__init__.cpython-313.pyc                  \n./mcp-server/ceregrep_mcp/__pycache__/server.cpython-313.pyc                    \n./mcp-server/ceregrep_mcp/__pycache__/tool_discovery.cpython-313.pyc            \n./mcp-server/test_mcp_client.py                                                 \n./mcp-server/tool_discovery.py                                                  \n./mcp-server/tools/__init__.py                                                  \n./mcp-server/tools/__pycache__/__init__.cpython-312.pyc                         \n./mcp-server/tools/__pycache__/base_tool.cpython-312.pyc                        \n./mcp-server/tools/__pycache__/ceregrep_query_tool.cpython-312.pyc              \n./mcp-server/tools/__pycache__/__init__.cpython-313.pyc                         \n./mcp-server/tools/__pycache__/base_tool.cpython-313.pyc                        \n./mcp-server/tools/__pycache__/ceregrep_query_tool.cpython-313.pyc              \n./mcp-server/tools/base_tool.py                                                 \n./mcp-server/tools/ceregrep_query_tool.py                                       \n./mcp-server/__pycache__/tool_discovery.cpython-313.pyc                         \n./mcp-server/__pycache__/mcp_server.cpython-313.pyc                             \n./mcp-server/test_agent_discovery.py                                            \n./mcp-server/test_mcp_list_tools.py                                             \n./mcp-server/run-mcp.sh                                                         \n./mcp-server/test_tools_exposed.py                                              \n./mcp-server/test_agent_invocation.py                                           \n./mcp-server/test_agent_tools.py                                                \n./mcp-server/README.md                                                          \n./mcp-server/mcp_server.py"
+        },
+        {
+          "role": "assistant",
+          "tool_calls": [
+            {
+              "id": "e08e99753",
+              "type": "function",
+              "function": {
+                "name": "Bash",
+                "arguments": "{\"command\":\"ls -la\"}"
+              }
+            }
+          ],
+          "content": "Let me get a better understanding of the directory structure by looking at the top-level directories and files:"
+        },
+        {
+          "role": "tool",
+          "tool_call_id": "e08e99753",
+          "content": "drwxr-xr-x 1 alejandro alejandro    210 Oct 24 14:40 .git                       \n-rw-r--r-- 1 alejandro alejandro    457 Oct 24 13:07 .gitignore                 \ndrwxr-xr-x 1 alejandro alejandro     74 Oct 22 19:57 hooks                      \n-rw-r--r-- 1 alejandro alejandro   6855 Oct 22 19:57 HOOKS.md                   \n-rw-r--r-- 1 alejandro alejandro   1245 Oct 21 12:46 index.ts                   \n-rw-r--r-- 1 alejandro alejandro    728 Oct 21 12:46 LICENSE                    \ndrwxr-xr-x 1 alejandro alejandro     64 Oct 24 14:50 llm                        \ndrwxr-xr-x 1 alejandro alejandro     42 Oct 24 13:49 mcp                        \ndrwxr-xr-x 1 alejandro alejandro    440 Oct 24 13:50 mcp-server                 \ndrwxr-xr-x 1 alejandro alejandro   4450 Oct 24 13:41 node_modules               \n-rw-r--r-- 1 alejandro alejandro   2341 Oct 24 13:41 package.json               \n-rw-r--r-- 1 alejandro alejandro 119088 Oct 24 13:41 package-lock.json          \n-rw-r--r-- 1 alejandro alejandro    133 Oct 24 13:07 pyproject.toml             \n-rw-r--r-- 1 alejandro alejandro   7068 Oct 24 13:07 README.md                  \ndrwxr-xr-x 1 alejandro alejandro     30 Oct 24 13:07 scripts                    \ndrwxr-xr-x 1 alejandro alejandro     20 Oct 21 12:46 sdk                        \ndrwxr-xr-x 1 alejandro alejandro     36 Oct 22 19:57 services                   \n-rw-r--r-- 1 alejandro alejandro   5543 Oct 21 12:46 SETUP.md                   \n-rw-r--r-- 1 alejandro alejandro   1764 Oct 21 12:46 test-architecture-analysis.\nts                                                                              \n-rw-r--r-- 1 alejandro alejandro   1294 Oct 21 12:46 test-cerebras.ts           \n-rw-r--r-- 1 alejandro alejandro   9044 Oct 21 12:46 test-message-formatting.ts \ndrwxr-xr-x 1 alejandro alejandro     44 Oct 24 13:07 tools                      \n-rw-r--r-- 1 alejandro alejandro    777 Oct 22 19:57 tsconfig.json              \ndrwx------ 1 alejandro alejandro    198 Oct 24 13:07 tui                        \ndrwx------ 1 alejandro alejandro     22 Oct 21 15:10 types                      \ndrwxr-xr-x 1 alejandro alejandro    252 Oct 24 13:07 utils                      \n-rw-r--r-- 1 alejandro alejandro    128 Oct 24 13:10 uv.lock                    \ndrwxr-xr-x 1 alejandro alejandro     96 Oct 24 13:10 .venv"
+        },
+        {
+          "role": "assistant",
+          "tool_calls": [
+            {
+              "id": "1c340daba",
+              "type": "function",
+              "function": {
+                "name": "Bash",
+                "arguments": "{\"command\":\"ls -la llm/\"}"
+              }
+            }
+          ],
+          "content": "Now let me explore the main directories to understand the system architecture better. Let's start with the `llm` directory:"
+        },
+        {
+          "role": "tool",
+          "tool_call_id": "1c340daba",
+          "content": "total 48                                                                        \ndrwxr-xr-x 1 alejandro alejandro    64 Oct 24 14:50 .                           \ndrwxr-xr-x 1 alejandro alejandro   892 Oct 24 14:48 ..                          \n-rw-r--r-- 1 alejandro alejandro  4409 Oct 21 12:46 anthropic.ts                \n-rw-r--r-- 1 alejandro alejandro 33187 Oct 24 14:50 cerebras.ts                 \n-rw-r--r-- 1 alejandro alejandro  2076 Oct 21 12:46 router.ts"
+        }
+      ],
+      "temperature": 0.7,
+      "top_p": 0.8,
+      "tools": [
+        {
+          "type": "function",
+          "function": {
+            "name": "Bash",
+            "description": "Tool: Bash",
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "command": {
+                  "type": "string",
+                  "description": "The command to execute"
+                },
+                "timeout": {
+                  "type": "number",
+                  "description": "Optional timeout in milliseconds (max 600000)"
+                }
+              },
+              "required": [
+                "command"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        {
+          "type": "function",
+          "function": {
+            "name": "Grep",
+            "description": "Tool: Grep",
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "pattern": {
+                  "type": "string",
+                  "description": "The regular expression pattern to search for in file contents"
+                },
+                "path": {
+                  "type": "string",
+                  "description": "The directory to search in. Defaults to the current working directory."
+                },
+                "include": {
+                  "type": "string",
+                  "description": "File pattern to include in the search (e.g. \"*.ts\", \"*.{ts,tsx}\")"
+                }
+              },
+              "required": [
+                "pattern"
+              ],
+              "additionalProperties": false
+            }
+          }
+        }
+      ],
+      "tool_choice": "auto"
+    },
+    "bodySize": 10049
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "date": "Fri, 24 Oct 2025 18:51:19 GMT",
+      "content-type": "application/json",
+      "transfer-encoding": "chunked",
+      "connection": "keep-alive",
+      "server": "cloudflare",
+      "x-request-id": "993baa373c7241bf-ATL",
+      "x-ratelimit-limit-requests-day": "172800",
+      "x-ratelimit-limit-tokens-minute": "1500000",
+      "x-ratelimit-remaining-requests-day": "170738",
+      "x-ratelimit-remaining-tokens-minute": "1495459",
+      "x-ratelimit-reset-requests-day": "18520.207956552505",
+      "x-ratelimit-reset-tokens-minute": "40.20795655250549",
+      "inference-id": "chatcmpl-90104938-ff4c-4cb9-90e9-e38092aca154",
+      "referrer-policy": "strict-origin-when-cross-origin",
+      "x-content-type-options": "nosniff",
+      "strict-transport-security": "max-age=3600; includeSubDomains",
+      "cf-cache-status": "DYNAMIC",
+      "set-cookie": "__cf_bm=w7vaLMs0YsYdWmDH7Lg9wqjH3KakHlT0rXR09DZcdWI-1761331879.556134-1.0.1.1-H0rgGuXIxFrqDj7EfxdVm7RMoA9V_Fwd9Q90.QjOys4x2Gt_5jy.m_31sp1zqnRETlFhN3C2Ubeyop7z.0v_aGNljZsgD4LIbdTDLQ1tES6lQ8flfyqSxJa8c_PF_bW2; HttpOnly; Secure; Path=/; Expires=Fri, 24 Oct 2025 19:21:19 GMT",
+      "cf-ray": "993baa373c7241bf-ATL",
+      "alt-svc": "h3=\":443\"; ma=86400"
+    },
+    "body": {
+      "id": "chatcmpl-90104938-ff4c-4cb9-90e9-e38092aca154",
+      "choices": [
+        {
+          "finish_reason": "tool_calls",
+          "index": 0,
+          "message": {
+            "content": "Let's look at the `mcp` directory:\n\n",
+            "tool_calls": [
+              {
+                "id": "3e49bc665",
+                "type": "function",
+                "function": {
+                  "name": "Bash",
+                  "arguments": "{\"command\": \"ls -la mcp/\"}"
+                }
+              }
+            ],
+            "role": "assistant"
+          }
+        }
+      ],
+      "created": 1761331879,
+      "model": "qwen-3-coder-480b",
+      "system_fingerprint": "fp_386b539e7b02ce3613b7",
+      "object": "chat.completion",
+      "usage": {
+        "prompt_tokens": 2475,
+        "completion_tokens": 37,
+        "total_tokens": 2512,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        }
+      },
+      "time_info": {
+        "queue_time": 0.002185358,
+        "prompt_time": 0.02995092,
+        "completion_time": 0.091492459,
+        "total_time": 0.12531709671020508,
+        "created": 1761331879.6336038
+      }
+    },
+    "duration": 362
+  }
+}
