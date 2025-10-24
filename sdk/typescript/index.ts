@@ -52,7 +52,8 @@ export class CeregrepClient {
    * Initialize client (load tools)
    */
   async initialize() {
-    this.tools = await getTools(true);
+    // Load MCP tools but NOT agent tools (agent tools cause 400 errors with Cerebras)
+    this.tools = await getTools(true, false);
   }
 
   /**

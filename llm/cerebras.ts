@@ -9,12 +9,18 @@ import { Tool } from '../core/tool.js';
 import { AssistantMessage, UserMessage } from '../core/messages.js';
 import { z } from 'zod';
 import { zodToJsonSchema } from 'zod-to-json-schema';
+import { countTokens } from '../core/tokens.js';
 
 const CEREBRAS_BASE_URL = 'https://api.cerebras.ai/v1';
 const CEREBRAS_COST_PER_MILLION_TOKENS = 2.0; // Both input and output
 
+// CRITICAL: Cerebras API has a hard token limit of 131,072 tokens per request
+// This is the actual limit discovered through testing (returns 400 when exceeded)
+const CEREBRAS_MAX_TOKENS_PER_REQUEST = 131072;
+const CEREBRAS_SAFE_LIMIT = Math.floor(CEREBRAS_MAX_TOKENS_PER_REQUEST * 0.95); // 95% safety margin
+
 // Retry configuration
-const MAX_RETRIES = 3;
+const MAX_RETRIES = 2; // 1-2 retries max as requested
 const BASE_DELAY_MS = 1000; // 1 second base delay
 const MAX_DELAY_MS = 60000; // 60 seconds max delay
 
@@ -320,15 +326,24 @@ export async function queryCerebras(
         .join('\n');
 
       if (toolCalls.length > 0) {
-        // When there are tool calls, follow llxprt approach:
-        // Use null for content when there's no text (not omitted, not empty string)
+        // When there are tool calls:
+        // CRITICAL: OpenAI/Cerebras API requires content when tool_calls present
+        // Use a space if no text content to avoid empty string issues
         const trimmedContent = textContent.trim();
-
-        apiMessages.push({
+        const msgContent: any = {
           role: 'assistant',
-          content: trimmedContent || null,
           tool_calls: toolCalls,
-        });
+        };
+
+        // Only include content if it's not empty
+        if (trimmedContent) {
+          msgContent.content = trimmedContent;
+        } else {
+          // Don't omit content field - set to space to avoid API issues
+          msgContent.content = ' ';
+        }
+
+        apiMessages.push(msgContent);
       } else {
         apiMessages.push({
           role: 'assistant',
@@ -395,8 +410,13 @@ export async function queryCerebras(
   const requestSizeMB = (requestSizeBytes / (1024 * 1024)).toFixed(2);
   const MAX_REQUEST_SIZE_BYTES = 1_500_000; // 1.5MB conservative limit
 
+  // CRITICAL TOKEN LIMIT VALIDATION: Cerebras has hard limit of 131,072 tokens
+  // Check token count BEFORE sending to avoid 400 errors
+  const tokenCount = countTokens(apiMessages);
+  const tokenLimitExceeded = tokenCount > CEREBRAS_SAFE_LIMIT;
+
   // Log telemetry for all requests
-  console.error(`📊 [Request Stats] ${requestParams.messages.length} messages, ${requestSizeKB}KB payload`);
+  console.error(`📊 [Request Stats] ${requestParams.messages.length} messages, ${requestSizeKB}KB payload, ${tokenCount} tokens`);
 
   if (requestSizeBytes > MAX_REQUEST_SIZE_BYTES) {
     console.error(`⚠️  [Request Size Limit] Request size ${requestSizeMB}MB exceeds safe limit of ${(MAX_REQUEST_SIZE_BYTES / (1024 * 1024)).toFixed(2)}MB`);
@@ -427,6 +447,39 @@ export async function queryCerebras(
     const finalSize = JSON.stringify(requestParams).length;
     if (finalSize > MAX_REQUEST_SIZE_BYTES) {
       console.error(`   ⚠️  Still over limit after reduction. Request may fail.`);
+    }
+  }
+
+  // TOKEN LIMIT VALIDATION: Reduce messages if token count exceeds Cerebras limit
+  if (tokenLimitExceeded) {
+    console.error(`\n⚠️  [TOKEN LIMIT] Current tokens: ${tokenCount} exceeds safe limit of ${CEREBRAS_SAFE_LIMIT}`);
+    console.error(`   Cerebras API hard limit: ${CEREBRAS_MAX_TOKENS_PER_REQUEST} tokens`);
+    console.error(`   Applying aggressive message reduction...`);
+
+    // Keep system message + progressively fewer recent messages
+    const systemMsg = requestParams.messages.find((m: any) => m.role === 'system');
+    const nonSystemMessages = requestParams.messages.filter((m: any) => m.role !== 'system');
+
+    // Try reducing to 8, then 5, then 3 messages
+    for (const targetCount of [8, 5, 3]) {
+      const reducedMessages = nonSystemMessages.slice(-targetCount);
+      const testMessages = systemMsg ? [systemMsg, ...reducedMessages] : reducedMessages;
+      const testTokenCount = countTokens(testMessages);
+
+      if (testTokenCount <= CEREBRAS_SAFE_LIMIT) {
+        requestParams.messages = testMessages;
+        apiMessages.length = 0;
+        apiMessages.push(...testMessages);
+        console.error(`   ✅ Reduced to ${testMessages.length} messages (${testTokenCount} tokens)`);
+        break;
+      }
+    }
+
+    // Final token check
+    const finalTokenCount = countTokens(apiMessages);
+    if (finalTokenCount > CEREBRAS_SAFE_LIMIT) {
+      console.error(`   ⚠️  Still ${finalTokenCount} tokens after reduction. Request may fail.`);
+      console.error(`   Consider breaking this query into multiple smaller requests.`);
     }
   }
 
@@ -529,27 +582,31 @@ export async function queryCerebras(
         const errorType = error.constructor?.name || 'Error';
         const status = error.status || error.response?.status || 'N/A';
 
-        // SPECIAL HANDLING: 400 errors are often due to request size
-        // Try reducing context and retrying before giving up
+        // CRITICAL: Log response body if available for 400 errors
+        if (status === 400) {
+          console.error(`\n❌ [${new Date().toISOString()}] 400 Error Details:`);
+          console.error(`   Error Type: ${errorType}`);
+          console.error(`   Message: ${error.message}`);
+
+          // Try to extract actual error from response
+          if (error.response?.data) {
+            console.error('   Response Data:', JSON.stringify(error.response.data, null, 2));
+          }
+          if (error.error) {
+            console.error('   Error Object:', JSON.stringify(error.error, null, 2));
+          }
+
+          // Log the malformed request details
+          console.error(`   Request Size: ${JSON.stringify(requestParams).length} bytes`);
+          console.error(`   Message Count: ${requestParams.messages.length}`);
+          console.error(`   Tool Count: ${requestParams.tools?.length || 0}`);
+        }
+
+        // SIMPLE 400 RETRY: Just retry 1-2 times without complex logic
         if (status === 400 && attempt < MAX_RETRIES) {
-          console.error(`\n⚠️  400 Bad Request Error (attempt ${attempt + 1}/${MAX_RETRIES + 1})`);
-          console.error(`   This may be due to request size limits. Attempting aggressive context reduction...`);
-
-          // Aggressively reduce context - keep fewer messages each attempt
-          const systemMsg = requestParams.messages.find((m: any) => m.role === 'system');
-          const nonSystemMessages = requestParams.messages.filter((m: any) => m.role !== 'system');
-          const reductionTargets = [8, 6, 4, 2]; // Try progressively smaller contexts
-          const targetCount = reductionTargets[Math.min(attempt, reductionTargets.length - 1)];
-
-          const reducedMessages = nonSystemMessages.slice(-targetCount);
-          requestParams.messages = systemMsg ? [systemMsg, ...reducedMessages] : reducedMessages;
-
-          const newSize = JSON.stringify(requestParams).length;
-          const newSizeKB = (newSize / 1024).toFixed(2);
-          console.error(`   Reduced to ${requestParams.messages.length} messages (${newSizeKB}KB)`);
-          console.error(`   Retrying with reduced context...\n`);
-
           const delay = calculateBackoffDelay(attempt);
+          console.error(`\n⚠️  400 Bad Request Error (attempt ${attempt + 1}/${MAX_RETRIES + 1})`);
+          console.error(`   Retrying in ${(delay / 1000).toFixed(1)}s...\n`);
           await sleep(delay);
           continue;
         }
@@ -622,7 +679,7 @@ export async function queryCerebras(
 
         if (choice.message.tool_calls && choice.message.tool_calls.length > 0) {
           console.error('\n🛠️  Tool Calls in Response:', choice.message.tool_calls.length);
-          choice.message.tool_calls.forEach((tc, idx) => {
+          choice.message.tool_calls.forEach((tc: any, idx: number) => {
             console.error(`  [${idx + 1}] ${tc.function.name} (id: ${tc.id})`);
             console.error(`      Args: ${tc.function.arguments}`);
           });
