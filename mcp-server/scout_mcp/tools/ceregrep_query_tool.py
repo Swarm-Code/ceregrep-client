@@ -18,7 +18,7 @@ class CeregrepQueryTool(BaseTool):
 
     @property
     def name(self) -> str:
-        return "ceregrep_query"
+        return "scout_query"
 
     @property
     def description(self) -> str:
