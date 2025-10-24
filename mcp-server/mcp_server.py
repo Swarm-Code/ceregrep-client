@@ -18,9 +18,9 @@ from tool_discovery import tool_discovery
 # Debug flag
 DEBUG_MCP = os.getenv("DEBUG_MCP", "").lower() in ("1", "true", "yes")
 
-# Import agent tools from ceregrep_mcp package
+# Import agent tools from scout_mcp package
 try:
-    from ceregrep_mcp.tools.agent_tools import agent_tool_generator
+    from scout_mcp.tools.agent_tools import agent_tool_generator
     HAS_AGENT_TOOLS = True
     if DEBUG_MCP:
         print("[Scout MCP] Agent tools available", file=sys.stderr, flush=True)
