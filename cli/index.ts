@@ -5,9 +5,13 @@
  */
 
 import { Command } from 'commander';
+import { createRequire } from 'module';
 import { CeregrepClient } from '../sdk/typescript/index.js';
 import { getTools } from '../tools/index.js';
 import { getConfig, getCurrentProjectConfig, saveCurrentProjectConfig } from '../config/loader.js';
+
+const require = createRequire(import.meta.url);
+const { version } = require('../../package.json');
 import { PersistentShell } from '../utils/shell.js';
 import { StreamRenderer } from './stream-renderer.js';
 import { getTokenStats } from '../core/tokens.js';
@@ -35,9 +39,9 @@ if (!permCheck.isExecutable) {
 const program = new Command();
 
 program
-  .name('ceregrep')
+  .name('scout')
   .description('Headless agent framework with Bash, Ripgrep, and MCP support')
-  .version('0.2.2');
+  .version(version);
 
 // Check for updates asynchronously (non-blocking)
 async function checkVersionOnStartup() {
@@ -177,7 +181,7 @@ program
     try {
       const config = getConfig();
       console.log('╔════════════════════════════════════════╗');
-      console.log('║     Ceregrep Configuration           ║');
+      console.log('║     Scout Configuration           ║');
       console.log('╚════════════════════════════════════════╝\n');
 
       // Core configuration
@@ -274,7 +278,7 @@ program
 
 program
   .command('update')
-  .description('Update ceregrep to the latest version')
+  .description('Update scout to the latest version')
   .action(async () => {
     try {
       console.log('Checking for updates...\n');
@@ -295,7 +299,7 @@ program
 
       // Run npm update
       try {
-        execSync('npm install -g ceregrep@latest --force', {
+        execSync('npm install -g swarm-scout@latest --force', {
           stdio: 'inherit',
         });
         console.log(
@@ -305,7 +309,7 @@ program
         process.exit(0);
       } catch (error) {
         console.error('✗ Failed to update. Please try manually:');
-        console.error('  npm install -g ceregrep@latest');
+        console.error('  npm install -g swarm-scout@latest');
         process.exit(1);
       }
     } catch (error) {
@@ -316,21 +320,21 @@ program
 
 program
   .command('install')
-  .description('Reinstall ceregrep (useful for fixing issues)')
+  .description('Reinstall scout (useful for fixing issues)')
   .action(async () => {
     try {
       const version = await import('../utils/version-check.js').then(
         (m) => m.getLocalVersion()
       );
 
-      console.log(`Reinstalling ceregrep ${version}...\n`);
+      console.log(`Reinstalling scout ${version}...\n`);
 
       try {
         execSync('npm install -g . --force', {
           stdio: 'inherit',
           cwd: process.cwd(),
         });
-        console.log(`\n✓ Successfully reinstalled ceregrep ${version}`);
+        console.log(`\n✓ Successfully reinstalled scout ${version}`);
         await disconnectAllServers();
         process.exit(0);
       } catch (error) {

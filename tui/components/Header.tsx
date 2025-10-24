@@ -5,6 +5,10 @@
 
 import React from 'react';
 import { Box, Text } from 'ink';
+import { createRequire } from 'module';
+
+const require = createRequire(import.meta.url);
+const { version } = require('../../../package.json');
 
 interface HeaderProps {
   model: string;
@@ -60,7 +64,7 @@ export const Header: React.FC<HeaderProps> = ({ model, provider, cwd, agentMode,
 
         {/* Right: Info */}
         <Box flexDirection="column">
-          <Text color={WHITE} bold>Swarm-CLI v0.2.2</Text>
+          <Text color={WHITE} bold>Swarm-CLI v{version}</Text>
           <Text color={DIM_WHITE}>{shortModel} · {provider}</Text>
           <Text color={DIM_WHITE}>{cwd}</Text>
           <Text> </Text>

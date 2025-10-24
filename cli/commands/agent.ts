@@ -27,7 +27,7 @@ import { disconnectAllServers } from '../../mcp/client.js';
  */
 export function createAgentCommand(): Command {
   const agentCommand = new Command('agent')
-    .description('Manage and invoke ceregrep agents');
+    .description('Manage and invoke scout agents');
 
   // ceregrep agent <agent-id> <prompt> - Invoke agent
   agentCommand
@@ -173,7 +173,7 @@ export function createAgentCommand(): Command {
         }
 
         if (agents.global.length === 0 && agents.project.length === 0) {
-          console.log(chalk.yellow('No agents found. Run "ceregrep agent init" to install default templates.'));
+          console.log(chalk.yellow('No agents found. Run "scout agent init" to install default templates.'));
         }
 
         process.exit(0);

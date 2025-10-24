@@ -50,14 +50,17 @@ function compareVersions(v1: string, v2: string): number {
 export function getLocalPackageInfo(): { version: string; name: string } {
   try {
     // Try multiple locations to find package.json
+    // IMPORTANT: Check scout's own package.json BEFORE process.cwd()
     const possiblePaths = [
-      // Installed globally in node_modules
-      path.join(process.cwd(), 'package.json'),
+      // Scout's own package.json (relative to this file in dist/utils)
       path.dirname(new URL(import.meta.url).pathname).replace(/dist\/utils$/, 'package.json'),
-      path.join(process.env.HOME || '/tmp', '.local', 'lib', 'node_modules', 'ceregrep', 'package.json'),
+      // Global installations
       path.join(process.env.HOME || '/tmp', '.local', 'lib', 'node_modules', 'swarm-scout', 'package.json'),
-      '/usr/local/lib/node_modules/ceregrep/package.json',
       '/usr/local/lib/node_modules/swarm-scout/package.json',
+      path.join(process.env.HOME || '/tmp', '.local', 'lib', 'node_modules', 'ceregrep', 'package.json'),
+      '/usr/local/lib/node_modules/ceregrep/package.json',
+      // LAST RESORT: Current directory (may not be scout's package.json!)
+      path.join(process.cwd(), 'package.json'),
       path.join(process.cwd(), '..', 'package.json'),
     ];
 
