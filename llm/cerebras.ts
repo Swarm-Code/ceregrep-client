@@ -341,6 +341,26 @@ export async function queryCerebras(
   // CRITICAL: Flush any remaining tool responses at the end
   flushPendingToolResponses();
 
+  // CONTEXT MANAGEMENT: Trim conversation history if it exceeds limits
+  // This prevents 400 errors from Cerebras API due to oversized requests
+  const MAX_MESSAGES = 20; // Keep last 20 messages (excluding system)
+  const estimateTokens = (text: string) => Math.ceil(text.length / 4); // Rough token estimate
+
+  if (apiMessages.length > MAX_MESSAGES + 1) { // +1 for system message
+    const systemMsg = apiMessages.find(m => m.role === 'system');
+    const nonSystemMessages = apiMessages.filter(m => m.role !== 'system');
+    const recentMessages = nonSystemMessages.slice(-MAX_MESSAGES);
+
+    apiMessages.length = 0;
+    if (systemMsg) {
+      apiMessages.push(systemMsg);
+    }
+    apiMessages.push(...recentMessages);
+
+    console.error(`⚠️  [Context Management] Trimmed conversation from ${nonSystemMessages.length + 1} to ${apiMessages.length} messages`);
+    console.error(`   Kept: 1 system message + ${recentMessages.length} recent messages`);
+  }
+
   // Format tools
   const apiTools = formatToolsForOpenAI(tools);
 
@@ -350,7 +370,7 @@ export async function queryCerebras(
   // Build request params (outside try block so we can log it on error)
   // CRITICAL: Following llxprt-code pattern for Cerebras/Qwen compatibility
   // Reference: https://github.com/vybestack/llxprt-code OpenAIProvider.ts:742-755
-  const requestParams: any = {
+  let requestParams: any = {
     model,
     messages: apiMessages,
     temperature: options.temperature ?? 0.7,
@@ -365,6 +385,49 @@ export async function queryCerebras(
           tool_choice: 'auto',
         }
       : {}),
+  }
+
+  // REQUEST SIZE VALIDATION: Check and reduce request size if needed
+  // Cerebras API has undocumented size limits (~1-2MB JSON payload)
+  const requestJson = JSON.stringify(requestParams);
+  const requestSizeBytes = requestJson.length;
+  const requestSizeKB = (requestSizeBytes / 1024).toFixed(2);
+  const requestSizeMB = (requestSizeBytes / (1024 * 1024)).toFixed(2);
+  const MAX_REQUEST_SIZE_BYTES = 1_500_000; // 1.5MB conservative limit
+
+  // Log telemetry for all requests
+  console.error(`📊 [Request Stats] ${requestParams.messages.length} messages, ${requestSizeKB}KB payload`);
+
+  if (requestSizeBytes > MAX_REQUEST_SIZE_BYTES) {
+    console.error(`⚠️  [Request Size Limit] Request size ${requestSizeMB}MB exceeds safe limit of ${(MAX_REQUEST_SIZE_BYTES / (1024 * 1024)).toFixed(2)}MB`);
+    console.error(`   Applying aggressive context reduction...`);
+
+    // Keep system message + progressively fewer recent messages
+    const systemMsg = requestParams.messages.find((m: any) => m.role === 'system');
+    const nonSystemMessages = requestParams.messages.filter((m: any) => m.role !== 'system');
+
+    // Try reducing to 10, then 6, then 4 messages
+    for (const targetCount of [10, 6, 4]) {
+      const reducedMessages = nonSystemMessages.slice(-targetCount);
+      const testParams = {
+        ...requestParams,
+        messages: systemMsg ? [systemMsg, ...reducedMessages] : reducedMessages,
+      };
+      const testSize = JSON.stringify(testParams).length;
+
+      if (testSize <= MAX_REQUEST_SIZE_BYTES) {
+        requestParams = testParams;
+        const newSizeKB = (testSize / 1024).toFixed(2);
+        console.error(`   ✅ Reduced to ${targetCount} messages (${newSizeKB}KB)`);
+        break;
+      }
+    }
+
+    // Final check
+    const finalSize = JSON.stringify(requestParams).length;
+    if (finalSize > MAX_REQUEST_SIZE_BYTES) {
+      console.error(`   ⚠️  Still over limit after reduction. Request may fail.`);
+    }
   }
 
   try {
@@ -463,11 +526,37 @@ export async function queryCerebras(
       } catch (error: any) {
         lastError = error;
 
-        // Check if we should retry
+        const errorType = error.constructor?.name || 'Error';
+        const status = error.status || error.response?.status || 'N/A';
+
+        // SPECIAL HANDLING: 400 errors are often due to request size
+        // Try reducing context and retrying before giving up
+        if (status === 400 && attempt < MAX_RETRIES) {
+          console.error(`\n⚠️  400 Bad Request Error (attempt ${attempt + 1}/${MAX_RETRIES + 1})`);
+          console.error(`   This may be due to request size limits. Attempting aggressive context reduction...`);
+
+          // Aggressively reduce context - keep fewer messages each attempt
+          const systemMsg = requestParams.messages.find((m: any) => m.role === 'system');
+          const nonSystemMessages = requestParams.messages.filter((m: any) => m.role !== 'system');
+          const reductionTargets = [8, 6, 4, 2]; // Try progressively smaller contexts
+          const targetCount = reductionTargets[Math.min(attempt, reductionTargets.length - 1)];
+
+          const reducedMessages = nonSystemMessages.slice(-targetCount);
+          requestParams.messages = systemMsg ? [systemMsg, ...reducedMessages] : reducedMessages;
+
+          const newSize = JSON.stringify(requestParams).length;
+          const newSizeKB = (newSize / 1024).toFixed(2);
+          console.error(`   Reduced to ${requestParams.messages.length} messages (${newSizeKB}KB)`);
+          console.error(`   Retrying with reduced context...\n`);
+
+          const delay = calculateBackoffDelay(attempt);
+          await sleep(delay);
+          continue;
+        }
+
+        // Check if we should retry for other retryable errors
         if (attempt < MAX_RETRIES && isRetryableError(error)) {
           const delay = calculateBackoffDelay(attempt);
-          const errorType = error.constructor?.name || 'Error';
-          const status = error.status || error.response?.status || 'N/A';
           const nextTimeout = TIMEOUT_MS_BY_ATTEMPT[attempt + 1] || TIMEOUT_MS_BY_ATTEMPT[TIMEOUT_MS_BY_ATTEMPT.length - 1];
 
           console.error(`\n⚠️  Cerebras API Error (attempt ${attempt + 1}/${MAX_RETRIES + 1})`);
