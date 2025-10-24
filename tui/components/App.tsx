@@ -10,12 +10,12 @@ import { InputBox } from './InputBox.js';
 import { StatusBar } from './StatusBar.js';
 import { Header } from './Header.js';
 import { ConversationList } from './ConversationList.js';
-import { AgentSelector } from './AgentSelector.js';
 import { ConfigPanel, ConfigData } from './ConfigPanel.js';
 import { MCPManager } from './MCPManager.js';
 import { AgentManager } from './AgentManager.js';
 import { MessageNavigator } from './MessageNavigator.js';
 import { BranchSelector } from './BranchSelector.js';
+import { PromptSearch } from './PromptSearch.js';
 import { CeregrepClient } from '../../sdk/typescript/index.js';
 import { Message, createUserMessage, AssistantMessage } from '../../core/messages.js';
 import { getConfig, saveConfig } from '../../config/loader.js';
@@ -41,8 +41,9 @@ import { logConversation, logMessage } from '../logger.js';
 import { getTokenStats } from '../../core/tokens.js';
 import { getModeSystemPrompt } from '../mode-prompts.js';
 import { getBackgroundAgent } from '../background-agent.js';
+import { loadHistory, savePrompt, PromptHistoryEntry } from '../prompt-history.js';
 
-type View = 'chat' | 'conversations' | 'agents' | 'config' | 'mcp' | 'branches' | 'agentConfig';
+type View = 'chat' | 'conversations' | 'agents' | 'config' | 'mcp' | 'branches' | 'promptSearch';
 type AgentMode = 'PLAN' | 'ACT' | 'DEBUG';
 
 interface AppProps {
@@ -79,6 +80,9 @@ export const App: React.FC<AppProps> = ({ initialConversationId, initialAgentId,
   const [showExitHint, setShowExitHint] = useState(false);
   const [navigationIndex, setNavigationIndex] = useState<number | null>(null); // null = live mode
   const [isHistoricalView, setIsHistoricalView] = useState(false);
+  const [promptHistory, setPromptHistory] = useState<PromptHistoryEntry[]>([]);
+  const [historyIndex, setHistoryIndex] = useState<number | null>(null);
+  const [tempInput, setTempInput] = useState('');
   const abortControllerRef = useRef<AbortController | null>(null);
   const conversationStartTime = useRef<number>(Date.now());
   const lastCtrlCPress = useRef<number>(0);
@@ -154,6 +158,13 @@ export const App: React.FC<AppProps> = ({ initialConversationId, initialAgentId,
     }
   }, [initialConversationId]);
 
+  // Load prompt history on mount
+  useEffect(() => {
+    loadHistory().then(history => {
+      setPromptHistory(history);
+    });
+  }, []);
+
   // Get mode color and description
   const getModeInfo = (mode: AgentMode) => {
     switch (mode) {
@@ -178,6 +189,40 @@ export const App: React.FC<AppProps> = ({ initialConversationId, initialAgentId,
   // Toggle auto mode (Shift+Tab)
   const toggleAutoMode = () => {
     setAutoMode(!autoMode);
+  };
+
+  // Handle prompt history navigation
+  const handleHistoryNavigation = (direction: 'up' | 'down') => {
+    if (promptHistory.length === 0) return;
+
+    if (direction === 'up') {
+      // Going back in history (older prompts)
+      if (historyIndex === null) {
+        // First navigation - save current input and go to most recent
+        setTempInput(inputValue);
+        setHistoryIndex(0);
+        setInputValue(promptHistory[0].text);
+      } else if (historyIndex < promptHistory.length - 1) {
+        // Move to older prompt
+        const newIndex = historyIndex + 1;
+        setHistoryIndex(newIndex);
+        setInputValue(promptHistory[newIndex].text);
+      }
+    } else {
+      // Going forward in history (newer prompts)
+      if (historyIndex !== null) {
+        if (historyIndex > 0) {
+          // Move to newer prompt
+          const newIndex = historyIndex - 1;
+          setHistoryIndex(newIndex);
+          setInputValue(promptHistory[newIndex].text);
+        } else {
+          // At newest - restore temp input
+          setHistoryIndex(null);
+          setInputValue(tempInput);
+        }
+      }
+    }
   };
 
   // Handle keyboard shortcuts
@@ -296,16 +341,16 @@ export const App: React.FC<AppProps> = ({ initialConversationId, initialAgentId,
       return; // Prevent 'o' from being added to input
     }
 
-    // Ctrl+P to toggle MCP manager (Ctrl+M conflicts with Enter)
-    if (key.ctrl && input === 'p') {
+    // Ctrl+T to toggle MCP manager (T = Tools/MCP Tools)
+    if (key.ctrl && input === 't') {
       setView(view === 'mcp' ? 'chat' : 'mcp');
-      return; // Prevent 'p' from being added to input
+      return; // Prevent 't' from being added to input
     }
 
-    // Ctrl+K to toggle agent manager (Ctrl+G conflicts with Bell)
-    if (key.ctrl && input === 'k') {
-      setView(view === 'agentConfig' ? 'chat' : 'agentConfig');
-      return; // Prevent 'k' from being added to input
+    // Ctrl+R to search prompt history
+    if (key.ctrl && input === 'r') {
+      setView('promptSearch');
+      return; // Prevent 'r' from being added to input
     }
 
     // Escape to stop/force stop agent execution
@@ -456,6 +501,16 @@ export const App: React.FC<AppProps> = ({ initialConversationId, initialAgentId,
 
       // Save updated conversation
       await saveConversation(conversation);
+
+      // Save prompt to history
+      const promptText = typeof input === 'string' ? input : input;
+      await savePrompt(promptText, conversation.id);
+      // Reload history to get the updated list
+      const updatedHistory = await loadHistory();
+      setPromptHistory(updatedHistory);
+      // Reset history navigation
+      setHistoryIndex(null);
+      setTempInput('');
 
       // Get the updated messages for title generation
       const updatedMessages = [...currentMessages, ...newMessages];
@@ -818,13 +873,11 @@ export const App: React.FC<AppProps> = ({ initialConversationId, initialAgentId,
                   <Text></Text>
                   <Text bold color={PURPLE}>SETTINGS:</Text>
                   <Text color={BLUE}>/agent</Text>
-                  <Text color={WHITE}>  Choose a different AI agent (Ctrl+A)</Text>
+                  <Text color={WHITE}>  Switch and manage AI agents (Ctrl+A)</Text>
                   <Text color={BLUE}>/config</Text>
                   <Text color={WHITE}>  Configure settings</Text>
                   <Text color={BLUE}>/mcp</Text>
-                  <Text color={WHITE}>  Manage tools and integrations (Ctrl+P)</Text>
-                  <Text color={CYAN}>Ctrl+K</Text>
-                  <Text color={WHITE}>  Manage and configure agents</Text>
+                  <Text color={WHITE}>  Manage MCP tools and servers (Ctrl+T)</Text>
                   <Text></Text>
                   <Text bold color={PURPLE}>ADVANCED:</Text>
                   <Text color={BLUE}>/compact</Text>
@@ -905,6 +958,7 @@ export const App: React.FC<AppProps> = ({ initialConversationId, initialAgentId,
               modeColor={getModeInfo(agentMode).color}
               value={inputValue}
               onChange={setInputValue}
+              onNavigateHistory={handleHistoryNavigation}
             />
           </>
         )}
@@ -917,10 +971,13 @@ export const App: React.FC<AppProps> = ({ initialConversationId, initialAgentId,
         )}
 
         {view === 'agents' && (
-          <AgentSelector
+          <AgentManager
             currentAgentId={agentId}
-            onSelect={handleAgentSelect}
+            onSwitchAgent={handleAgentSelect}
             onCancel={() => setView('chat')}
+            onAgentChange={() => {
+              // Reload agents list if needed
+            }}
           />
         )}
 
@@ -936,15 +993,6 @@ export const App: React.FC<AppProps> = ({ initialConversationId, initialAgentId,
           <MCPManager
             onCancel={() => setView('chat')}
             onServerChange={handleMCPServerChange}
-          />
-        )}
-
-        {view === 'agentConfig' && (
-          <AgentManager
-            onCancel={() => setView('chat')}
-            onAgentChange={() => {
-              // Reload agents list if needed
-            }}
           />
         )}
 
