@@ -6,9 +6,10 @@
 import OpenAI from 'openai';
 import { randomUUID } from 'crypto';
 import { Tool } from '../core/tool.js';
-import { AssistantMessage, UserMessage } from '../core/messages.js';
+import { AssistantMessage, UserMessage, Message, createUserMessage } from '../core/messages.js';
 import { z } from 'zod';
 import { zodToJsonSchema } from 'zod-to-json-schema';
+import { compact as agentCompact } from '../core/agent.js';
 
 const CEREBRAS_BASE_URL = 'https://api.cerebras.ai/v1';
 const CEREBRAS_COST_PER_MILLION_TOKENS = 2.0; // Both input and output
@@ -519,6 +520,7 @@ export async function queryCerebras(
     temperature?: number;
     top_p?: number;
   },
+  _isRetryAfterCompaction: boolean = false,
 ): Promise<AssistantMessage> {
   // Rate limiting: ensure minimum delay between requests
   const now = Date.now();
@@ -760,33 +762,111 @@ export async function queryCerebras(
 
   if (requestSizeBytes > MAX_REQUEST_SIZE_BYTES) {
     console.error(`⚠️  [Request Size Limit] Request size ${requestSizeMB}MB exceeds safe limit of ${(MAX_REQUEST_SIZE_BYTES / (1024 * 1024)).toFixed(2)}MB`);
-    console.error(`   Applying aggressive context reduction...`);
 
-    // Keep system message + progressively fewer recent messages
-    const systemMsg = requestParams.messages.find((m: any) => m.role === 'system');
-    const nonSystemMessages = requestParams.messages.filter((m: any) => m.role !== 'system');
-
-    // Try reducing to 10, then 6, then 4 messages
-    for (const targetCount of [10, 6, 4]) {
-      const reducedMessages = nonSystemMessages.slice(-targetCount);
-      const testParams = {
-        ...requestParams,
-        messages: systemMsg ? [systemMsg, ...reducedMessages] : reducedMessages,
-      };
-      const testSize = JSON.stringify(testParams).length;
-
-      if (testSize <= MAX_REQUEST_SIZE_BYTES) {
-        requestParams = testParams;
-        const newSizeKB = (testSize / 1024).toFixed(2);
-        console.error(`   ✅ Reduced to ${targetCount} messages (${newSizeKB}KB)`);
-        break;
-      }
+    // If this is already a retry after compaction, we can't compact further
+    if (_isRetryAfterCompaction) {
+      console.error(`   ❌ Already tried compaction - request still too large`);
+      throw new Error(
+        `Request size (${requestSizeMB}MB) exceeds limit even after compaction. ` +
+        `Try starting a new conversation or reducing tool output sizes.`
+      );
     }
 
-    // Final check
-    const finalSize = JSON.stringify(requestParams).length;
-    if (finalSize > MAX_REQUEST_SIZE_BYTES) {
-      console.error(`   ⚠️  Still over limit after reduction. Request may fail.`);
+    console.error(`   🔄 AUTO-COMPACTING conversation to reduce size...`);
+    console.error(``);
+
+    // Convert API messages back to our Message format for compaction
+    const originalMessages: Message[] = messages;
+
+    if (originalMessages.length <= 10) {
+      console.error(`   ❌ Only ${originalMessages.length} messages - can't compact further`);
+      throw new Error(
+        `Request too large but too few messages to compact. ` +
+        `Try reducing tool output sizes or starting a new conversation.`
+      );
+    }
+
+    try {
+      // Use the SDK's compact function
+      console.error(`   📝 Generating summary of old messages...`);
+
+      // Create a wrapper that includes the API key and options
+      const queryFnWithOptions = async (
+        msgs: any[],
+        sysPrompt: string[],
+        maxThinking: number,
+        toolsParam: Tool[],
+        signal: AbortSignal,
+        opts: any,
+      ) => {
+        return await queryCerebras(
+          msgs,
+          sysPrompt,
+          maxThinking,
+          toolsParam,
+          signal,
+          {
+            ...opts,
+            apiKey: options.apiKey, // CRITICAL: Pass through API key
+            baseURL: options.baseURL,
+            model: options.model || 'llama-3.3-70b',
+          },
+          true, // Mark as compaction call to prevent infinite recursion
+        );
+      };
+
+      const compacted = await agentCompact(
+        originalMessages,
+        tools,
+        queryFnWithOptions,
+        options.model || 'llama-3.3-70b',
+        abortSignal,
+        10, // Keep last 10 messages
+      );
+
+      console.error(`   ✅ Compacted ${compacted.clearedMessages.length} messages into summary`);
+      console.error(`   📦 Retrying with ONLY summary (no old messages)...`);
+      console.error(``);
+
+      // Build new message array: ONLY the summary as a user message
+      // This matches Claude Code's pattern - no tool outputs, no old messages
+      // Just the summary to start fresh
+
+      // Extract text content from summary
+      let summaryText = '';
+      const summaryContent = compacted.summary.message.content;
+      if (Array.isArray(summaryContent)) {
+        summaryText = summaryContent
+          .filter((block: any) => block.type === 'text')
+          .map((block: any) => block.text)
+          .join('\n');
+      } else if (typeof summaryContent === 'string') {
+        summaryText = summaryContent;
+      }
+
+      const compactedMessages: Message[] = [
+        createUserMessage(
+          'The conversation history has been compacted into this summary:\n\n' + summaryText
+        ),
+      ];
+
+      // Retry the query with ONLY the summary
+      // No old messages - completely fresh start with context preserved in summary
+      return await queryCerebras(
+        compactedMessages as (UserMessage | AssistantMessage)[],
+        systemPrompt,
+        maxThinkingTokens,
+        tools, // Still pass tools - agent needs them for new queries
+        abortSignal,
+        options,
+        true, // Mark as retry after compaction
+      );
+    } catch (compactError) {
+      console.error(`   ❌ Auto-compaction failed:`, compactError);
+      throw new Error(
+        `Request too large and auto-compaction failed. ` +
+        `Use /compact command manually or start a new conversation.`
+      );
     }
   }
 
@@ -997,13 +1077,22 @@ export async function queryCerebras(
           console.error(`   4. Invalid characters in content`);
         }
 
-        // SIMPLE 400 RETRY: Just retry 1-2 times without complex logic
-        if (status === 400 && attempt < MAX_RETRIES) {
-          const delay = calculateBackoffDelay(attempt);
-          console.error(`\n⚠️  400 Bad Request Error (attempt ${attempt + 1}/${MAX_RETRIES + 1})`);
-          console.error(`   Retrying in ${(delay / 1000).toFixed(1)}s...\n`);
-          await sleep(delay);
-          continue;
+        // 400 ERROR HANDLING: Don't retry same malformed request
+        // Instead, throw error to trigger conversation rollback at agent level
+        if (status === 400) {
+          console.error(`\n🔄 400 Bad Request - Will rollback and retry from previous state`);
+
+          // Import error class
+          const { BadRequestRetryError } = await import('./errors.js');
+
+          throw new BadRequestRetryError(
+            '400 Bad Request - Malformed request, needs conversation rollback',
+            error,
+            {
+              messageCount: requestParams.messages.length,
+              requestSize: JSON.stringify(requestParams).length,
+            }
+          );
         }
 
         // Check if we should retry for other retryable errors
@@ -1231,6 +1320,27 @@ export async function queryCerebras(
       console.error('API messages:', JSON.stringify(apiMessages, null, 2));
       console.error('\nAPI tools:', JSON.stringify(apiTools, null, 2));
       console.error('=== END DEBUG ===\n');
+    }
+
+    // CRITICAL: Enhance error with request details for TUI display
+    if (status === 400) {
+      const enhancedError = new Error(error.message);
+      (enhancedError as any).statusCode = 400;
+      (enhancedError as any).requestDetails = {
+        messageCount: requestParams.messages.length,
+        toolCount: requestParams.tools?.length || 0,
+        requestSize: JSON.stringify(requestParams).length,
+        messages: requestParams.messages.map((msg: any, idx: number) => ({
+          index: idx + 1,
+          role: msg.role,
+          contentLength: msg.content ? msg.content.length : 0,
+          contentPreview: msg.content ? msg.content.substring(0, 200) : '<none>',
+          hasToolCalls: !!msg.tool_calls,
+          toolCallCount: msg.tool_calls?.length || 0,
+        })),
+        lastMessage: requestParams.messages[requestParams.messages.length - 1],
+      };
+      throw enhancedError;
     }
 
     throw error;

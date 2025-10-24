@@ -58,6 +58,7 @@ const BLUE = '#4169E1';
 const PURPLE = '#A855F7';
 const CYAN = '#22D3EE';
 const WHITE = '#FFFFFF';
+const DIM_WHITE = '#9CA3AF';
 const RED = '#EF4444';
 const GREEN = '#10B981';
 const YELLOW = '#F59E0B';
@@ -71,6 +72,7 @@ export const App: React.FC<AppProps> = ({ initialConversationId, initialAgentId,
   );
   const [isStreaming, setIsStreaming] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [errorDetails, setErrorDetails] = useState<any>(null); // For 400 error debugging
   const [agentId, setAgentId] = useState<string | undefined>(initialAgentId);
   const [showHelp, setShowHelp] = useState(false);
   const [client, setClient] = useState<CeregrepClient | null>(null);
@@ -529,8 +531,18 @@ export const App: React.FC<AppProps> = ({ initialConversationId, initialAgentId,
       // Handle abort error gracefully
       if (err instanceof Error && err.name === 'AbortError') {
         setError('Agent execution stopped by user');
+        setErrorDetails(null);
       } else {
-        setError(err instanceof Error ? err.message : String(err));
+        const errorMessage = err instanceof Error ? err.message : String(err);
+        setError(errorMessage);
+
+        // CRITICAL: Capture 400 error details for debugging
+        if (err instanceof Error && (err as any).statusCode === 400) {
+          setErrorDetails((err as any).requestDetails);
+          console.error('💥 400 Error Captured - View details in TUI');
+        } else {
+          setErrorDetails(null);
+        }
       }
     } finally {
       setIsStreaming(false);
@@ -947,8 +959,44 @@ export const App: React.FC<AppProps> = ({ initialConversationId, initialAgentId,
 
             {/* Error Display */}
             {error && (
-              <Box marginBottom={1}>
-                <Text bold color={RED}>⚠ {error}</Text>
+              <Box flexDirection="column" marginBottom={1} borderStyle="round" borderColor={RED} paddingX={1}>
+                <Text bold color={RED}>⚠  {error}</Text>
+
+                {/* CRITICAL: Show detailed 400 error info */}
+                {errorDetails && (
+                  <Box flexDirection="column" marginTop={1}>
+                    <Text bold color={YELLOW}>📊 Request Details:</Text>
+                    <Text color={WHITE}>  Messages: {errorDetails.messageCount}</Text>
+                    <Text color={WHITE}>  Tools: {errorDetails.toolCount}</Text>
+                    <Text color={WHITE}>  Request Size: {(errorDetails.requestSize / 1024).toFixed(2)}KB</Text>
+
+                    <Box marginTop={1}>
+                      <Text bold color={YELLOW}>📧 Last Message:</Text>
+                    </Box>
+                    <Text color={CYAN}>  Role: {errorDetails.lastMessage?.role}</Text>
+                    <Text color={WHITE}>  Content: {errorDetails.lastMessage?.content?.substring(0, 150) || '<none>'}...</Text>
+
+                    {errorDetails.messages && errorDetails.messages.length > 0 && (
+                      <Box flexDirection="column" marginTop={1}>
+                        <Text bold color={YELLOW}>📋 All Messages:</Text>
+                        {errorDetails.messages.slice(-5).map((msg: any) => (
+                          <Text key={msg.index} color={DIM_WHITE}>
+                            #{msg.index} ({msg.role}): {msg.contentPreview}...
+                          </Text>
+                        ))}
+                        {errorDetails.messages.length > 5 && (
+                          <Text color={DIM_WHITE}>  ... and {errorDetails.messages.length - 5} more</Text>
+                        )}
+                      </Box>
+                    )}
+
+                    <Box marginTop={1}>
+                      <Text bold color={ORANGE}>
+                        💡 Check stderr for full debugging output
+                      </Text>
+                    </Box>
+                  </Box>
+                )}
               </Box>
             )}
 

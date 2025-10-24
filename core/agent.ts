@@ -72,21 +72,69 @@ export async function* query(
     });
   }
 
-  // Query LLM
-  const assistantMessage = await querySonnetFn(
-    normalizeMessagesForAPI(messages),
-    fullSystemPrompt,
-    toolUseContext.options.maxThinkingTokens || 0,
-    toolUseContext.options.tools || [],
-    toolUseContext.abortController.signal,
-    {
-      dangerouslySkipPermissions: toolUseContext.options.dangerouslySkipPermissions ?? false,
-      model: toolUseContext.options.slowAndCapableModel,
-      prependCLISysprompt: true,
-      enableThinking: (toolUseContext.options as any).enableThinking ?? false,
-      ultrathinkMode: (toolUseContext.options as any).ultrathinkMode ?? false,
-    },
-  );
+  // Query LLM with 400 error recovery
+  let assistantMessage: AssistantMessage;
+  try {
+    assistantMessage = await querySonnetFn(
+      normalizeMessagesForAPI(messages),
+      fullSystemPrompt,
+      toolUseContext.options.maxThinkingTokens || 0,
+      toolUseContext.options.tools || [],
+      toolUseContext.abortController.signal,
+      {
+        dangerouslySkipPermissions: toolUseContext.options.dangerouslySkipPermissions ?? false,
+        model: toolUseContext.options.slowAndCapableModel,
+        prependCLISysprompt: true,
+        enableThinking: (toolUseContext.options as any).enableThinking ?? false,
+        ultrathinkMode: (toolUseContext.options as any).ultrathinkMode ?? false,
+      },
+    );
+  } catch (error: any) {
+    // Handle 400 Bad Request errors by rolling back to previous tool output
+    if (error.name === 'BadRequestRetryError') {
+      console.error(`\n🔄 [AGENT] Handling 400 error - Rolling back to previous state and retrying`);
+
+      // Find the last tool result message to rollback to
+      // Remove any assistant messages after it
+      let lastToolResultIndex = -1;
+      for (let i = messages.length - 1; i >= 0; i--) {
+        const m = messages[i];
+        if (m.type === 'user' && Array.isArray(m.message.content) &&
+            m.message.content.some((c: any) => c.type === 'tool_result')) {
+          lastToolResultIndex = i;
+          break;
+        }
+      }
+
+      if (lastToolResultIndex >= 0 && lastToolResultIndex < messages.length - 1) {
+        const rollbackMessages = messages.slice(0, lastToolResultIndex + 1);
+        console.error(`   Rolled back from ${messages.length} to ${rollbackMessages.length} messages`);
+
+        // Retry with rolled back conversation
+        assistantMessage = await querySonnetFn(
+          normalizeMessagesForAPI(rollbackMessages),
+          fullSystemPrompt,
+          toolUseContext.options.maxThinkingTokens || 0,
+          toolUseContext.options.tools || [],
+          toolUseContext.abortController.signal,
+          {
+            dangerouslySkipPermissions: toolUseContext.options.dangerouslySkipPermissions ?? false,
+            model: toolUseContext.options.slowAndCapableModel,
+            prependCLISysprompt: true,
+            enableThinking: (toolUseContext.options as any).enableThinking ?? false,
+            ultrathinkMode: (toolUseContext.options as any).ultrathinkMode ?? false,
+          },
+        );
+      } else {
+        // Can't rollback, re-throw
+        console.error(`   ❌ Cannot rollback - no previous tool result found`);
+        throw error;
+      }
+    } else {
+      // Not a 400 error, re-throw
+      throw error;
+    }
+  }
 
   if (toolUseContext.abortController.signal.aborted) {
     yield createAssistantMessage(INTERRUPT_MESSAGE);
