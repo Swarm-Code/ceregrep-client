@@ -15,6 +15,7 @@ interface InputBoxProps {
   value?: string;
   onChange?: (value: string) => void;
   onFilesAttached?: (files: string[]) => void;
+  onNavigateHistory?: (direction: 'up' | 'down') => void;
 }
 
 // Available commands
@@ -45,6 +46,7 @@ export const InputBox: React.FC<InputBoxProps> = ({
   value: externalValue,
   onChange: externalOnChange,
   onFilesAttached,
+  onNavigateHistory,
 }) => {
   const [internalValue, setInternalValue] = useState('');
   const [selectedIndex, setSelectedIndex] = useState(0);
@@ -244,6 +246,25 @@ export const InputBox: React.FC<InputBoxProps> = ({
       // Arrow up: move selection up
       if (key.upArrow) {
         setSelectedIndex((prev) => (prev - 1 + commandSuggestions.length) % commandSuggestions.length);
+        return;
+      }
+    }
+
+    // Block Ctrl+R and other app-level shortcuts from being typed into input
+    if (key.ctrl && (input === 'r' || input === 't' || input === 'a' || input === 'h' || input === 'o' || input === 'l' || input === 'b')) {
+      // These are handled at the App level, don't type them
+      return;
+    }
+
+    // Handle prompt history navigation (only when not in autocomplete mode)
+    if (onNavigateHistory && !showFileSuggestions && !showCommandSuggestions) {
+      if (key.upArrow) {
+        onNavigateHistory('up');
+        return;
+      }
+
+      if (key.downArrow) {
+        onNavigateHistory('down');
         return;
       }
     }
