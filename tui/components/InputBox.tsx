@@ -1,12 +1,14 @@
 /**
  * Input Box Component
  * Handles user input with command autocomplete
+ * PERFORMANCE OPTIMIZED: Uses debouncing and memoization
  */
 
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { Box, Text, useInput } from 'ink';
 import TextInput from 'ink-text-input';
 import { searchRepoFiles, FileResource } from '../../mcp/resources.js';
+import { PromptHistoryEntry } from '../prompt-history.js';
 
 interface InputBoxProps {
   onSubmit: (value: string, attachedFiles?: string[]) => void;
@@ -16,6 +18,7 @@ interface InputBoxProps {
   onChange?: (value: string) => void;
   onFilesAttached?: (files: string[]) => void;
   onNavigateHistory?: (direction: 'up' | 'down') => void;
+  promptHistory?: PromptHistoryEntry[];
 }
 
 // Available commands
@@ -39,7 +42,8 @@ const CYAN = '#22D3EE';
 const WHITE = '#FFFFFF';
 const DIM_WHITE = '#9CA3AF';
 
-export const InputBox: React.FC<InputBoxProps> = ({
+// PERFORMANCE: Memoize component to prevent unnecessary re-renders
+export const InputBox: React.FC<InputBoxProps> = React.memo(({
   onSubmit,
   disabled = false,
   modeColor,
@@ -47,18 +51,22 @@ export const InputBox: React.FC<InputBoxProps> = ({
   onChange: externalOnChange,
   onFilesAttached,
   onNavigateHistory,
+  promptHistory = [],
 }) => {
   const [internalValue, setInternalValue] = useState('');
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [attachedFiles, setAttachedFiles] = useState<string[]>([]);
   const [fileSuggestions, setFileSuggestions] = useState<FileResource[]>([]);
   const [isLoadingFiles, setIsLoadingFiles] = useState(false);
+  const [isSearchMode, setIsSearchMode] = useState(false);
+  const [preSearchValue, setPreSearchValue] = useState('');
 
   // Use external value if provided, otherwise use internal state
   const value = externalValue !== undefined ? externalValue : internalValue;
   const setValue = externalOnChange || setInternalValue;
 
-  const handleSubmit = () => {
+  // PERFORMANCE: Memoize submit handler
+  const handleSubmit = useCallback(() => {
     if (value.trim() && !disabled) {
       onSubmit(value, attachedFiles);
       setValue('');
@@ -66,7 +74,7 @@ export const InputBox: React.FC<InputBoxProps> = ({
       setAttachedFiles([]);
       setFileSuggestions([]);
     }
-  };
+  }, [value, disabled, onSubmit, attachedFiles, setValue]);
 
   // Get terminal width for line
   const width = process.stdout.columns || 80;
@@ -93,6 +101,22 @@ export const InputBox: React.FC<InputBoxProps> = ({
     return patternIdx === patternLower.length;
   };
 
+  // Format timestamp as relative time
+  const formatRelativeTime = (timestamp: string): string => {
+    const now = new Date();
+    const then = new Date(timestamp);
+    const diffMs = now.getTime() - then.getTime();
+    const diffSec = Math.floor(diffMs / 1000);
+    const diffMin = Math.floor(diffSec / 60);
+    const diffHour = Math.floor(diffMin / 60);
+    const diffDay = Math.floor(diffHour / 24);
+
+    if (diffSec < 60) return `${diffSec}s ago`;
+    if (diffMin < 60) return `${diffMin}m ago`;
+    if (diffHour < 24) return `${diffHour}h ago`;
+    return `${diffDay}d ago`;
+  };
+
   // Detect @ mention and extract file search pattern
   const getAtMentionPattern = (text: string): string | null => {
     const cursorPos = text.length; // Since we're always at the end in this input
@@ -113,25 +137,41 @@ export const InputBox: React.FC<InputBoxProps> = ({
 
   const atMentionPattern = useMemo(() => getAtMentionPattern(value), [value]);
 
-  // Search for files when @ mention is detected
+  // PERFORMANCE: Debounce file search to avoid searching on every keystroke
+  const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
+
   useEffect(() => {
-    const searchFiles = async () => {
-      if (atMentionPattern !== null) {
-        setIsLoadingFiles(true);
-        try {
-          const files = await searchRepoFiles(atMentionPattern);
-          setFileSuggestions(files); // Show all matches
-        } catch (error) {
-          console.error('Failed to search files:', error);
-          setFileSuggestions([]);
-        }
-        setIsLoadingFiles(false);
-      } else {
+    // Clear previous timer
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+    }
+
+    // If no @ mention, clear suggestions immediately
+    if (atMentionPattern === null) {
+      setFileSuggestions([]);
+      setIsLoadingFiles(false);
+      return;
+    }
+
+    // CRITICAL: Debounce search by 150ms to prevent lag
+    setIsLoadingFiles(true);
+    debounceTimerRef.current = setTimeout(async () => {
+      try {
+        const files = await searchRepoFiles(atMentionPattern);
+        setFileSuggestions(files);
+      } catch (error) {
+        console.error('Failed to search files:', error);
         setFileSuggestions([]);
       }
-    };
+      setIsLoadingFiles(false);
+    }, 150); // 150ms debounce
 
-    searchFiles();
+    // Cleanup
+    return () => {
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current);
+      }
+    };
   }, [atMentionPattern]);
 
   // Filter commands based on input with fuzzy matching
@@ -166,6 +206,30 @@ export const InputBox: React.FC<InputBoxProps> = ({
   const showCommandSuggestions = commandSuggestions.length > 0 && value.startsWith('/');
   const showFileSuggestions = fileSuggestions.length > 0 && atMentionPattern !== null;
 
+  // Filter prompts based on search query in search mode
+  const promptSuggestions = useMemo(() => {
+    if (!isSearchMode || promptHistory.length === 0) {
+      return [];
+    }
+
+    const query = value.trim();
+
+    // If no query, show all prompts (up to 10)
+    if (!query) {
+      return promptHistory.slice(0, 10);
+    }
+
+    // Fuzzy filter prompts
+    const matches = promptHistory.filter(prompt =>
+      fuzzyMatch(prompt.text, query)
+    );
+
+    // Return up to 10 matches
+    return matches.slice(0, 10);
+  }, [isSearchMode, promptHistory, value]);
+
+  const showPromptSuggestions = isSearchMode && promptSuggestions.length > 0;
+
   // Calculate scrolling window for suggestions
   const VISIBLE_ITEMS = 5;
   const getVisibleWindow = (selectedIdx: number, totalItems: number) => {
@@ -185,7 +249,7 @@ export const InputBox: React.FC<InputBoxProps> = ({
   // Reset selected index when suggestions change
   useEffect(() => {
     setSelectedIndex(0);
-  }, [commandSuggestions.length, fileSuggestions.length]);
+  }, [commandSuggestions.length, fileSuggestions.length, promptSuggestions.length]);
 
   // Notify parent about attached files
   useEffect(() => {
@@ -197,6 +261,61 @@ export const InputBox: React.FC<InputBoxProps> = ({
   // Handle Tab completion and arrow navigation
   useInput((input, key) => {
     if (disabled) return;
+
+    // Handle Ctrl+R to toggle search mode
+    if (key.ctrl && input === 'r') {
+      if (!isSearchMode) {
+        // Enter search mode
+        setIsSearchMode(true);
+        setPreSearchValue(value);
+        setValue('');
+        setSelectedIndex(0);
+      } else {
+        // Exit search mode without selecting
+        setIsSearchMode(false);
+        setValue(preSearchValue);
+        setSelectedIndex(0);
+      }
+      return;
+    }
+
+    // Handle prompt search mode
+    if (isSearchMode) {
+      // Escape: exit search mode
+      if (key.escape) {
+        setIsSearchMode(false);
+        setValue(preSearchValue);
+        setSelectedIndex(0);
+        return;
+      }
+
+      // Enter: select prompt and exit search mode
+      if (key.return && promptSuggestions.length > 0) {
+        const selected = promptSuggestions[selectedIndex];
+        if (selected) {
+          setValue(selected.text);
+          setIsSearchMode(false);
+          setSelectedIndex(0);
+        }
+        return;
+      }
+
+      // Arrow navigation for prompt suggestions
+      if (promptSuggestions.length > 0) {
+        if (key.downArrow) {
+          setSelectedIndex((prev) => (prev + 1) % promptSuggestions.length);
+          return;
+        }
+
+        if (key.upArrow) {
+          setSelectedIndex((prev) => (prev - 1 + promptSuggestions.length) % promptSuggestions.length);
+          return;
+        }
+      }
+
+      // Don't process other shortcuts in search mode
+      return;
+    }
 
     // Handle file suggestions
     if (showFileSuggestions) {
@@ -250,8 +369,8 @@ export const InputBox: React.FC<InputBoxProps> = ({
       }
     }
 
-    // Block Ctrl+R and other app-level shortcuts from being typed into input
-    if (key.ctrl && (input === 'r' || input === 't' || input === 'a' || input === 'h' || input === 'o' || input === 'l' || input === 'b')) {
+    // Block other app-level shortcuts from being typed into input (Ctrl+R handled above)
+    if (key.ctrl && (input === 't' || input === 'a' || input === 'h' || input === 'o' || input === 'l' || input === 'b')) {
       // These are handled at the App level, don't type them
       return;
     }
@@ -282,7 +401,7 @@ export const InputBox: React.FC<InputBoxProps> = ({
           value={value}
           onChange={setValue}
           onSubmit={handleSubmit}
-          placeholder={disabled ? 'Waiting...' : 'Type a message or /help for commands...'}
+          placeholder={disabled ? 'Waiting...' : isSearchMode ? 'Search prompts (fzf)...' : 'Type a message or /help for commands...'}
           showCursor={!disabled}
         />
       </Box>
@@ -382,6 +501,40 @@ export const InputBox: React.FC<InputBoxProps> = ({
           </Box>
         );
       })()}
+
+      {/* Prompt suggestions - inline fzf-style search */}
+      {showPromptSuggestions && (() => {
+        const window = getVisibleWindow(selectedIndex, promptSuggestions.length);
+        const visiblePrompts = promptSuggestions.slice(window.start, window.end);
+
+        return (
+          <Box flexDirection="column" paddingX={1}>
+            {visiblePrompts.map((prompt, idx) => {
+              const actualIndex = window.start + idx;
+              const isSelected = actualIndex === selectedIndex;
+
+              // Truncate long prompts
+              const displayText = prompt.text.length > 80
+                ? prompt.text.slice(0, 77) + '...'
+                : prompt.text;
+
+              const timeStr = formatRelativeTime(prompt.timestamp);
+
+              return (
+                <Box key={actualIndex}>
+                  <Text color={isSelected ? CYAN : DIM_WHITE}>
+                    {isSelected ? '▶ ' : '  '}
+                  </Text>
+                  <Text color={isSelected ? CYAN : WHITE}>
+                    {displayText}
+                  </Text>
+                  <Text color={DIM_WHITE}> ({timeStr})</Text>
+                </Box>
+              );
+            })}
+          </Box>
+        );
+      })()}
     </Box>
   );
-};
+}); // React.memo
