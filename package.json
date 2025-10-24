@@ -71,6 +71,7 @@
     "ink-select-input": "^6.0.0",
     "ink-text-input": "^6.0.0",
     "lodash-es": "^4.17.21",
+    "nanoid": "^5.1.6",
     "node-pty": "^1.0.0",
     "openai": "^4.77.0",
     "ora": "^9.0.0",
