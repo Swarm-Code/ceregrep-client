@@ -59,6 +59,7 @@
   ],
   "dependencies": {
     "@anthropic-ai/sdk": "^0.63.1",
+    "@cerebras/cerebras_cloud_sdk": "^1.56.1",
     "@modelcontextprotocol/sdk": "^1.18.2",
     "@types/react": "^19.1.13",
     "@xterm/headless": "^5.5.0",
