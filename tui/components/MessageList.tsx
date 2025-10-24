@@ -33,8 +33,8 @@ export const MessageList: React.FC<MessageListProps> = ({ messages, isStreaming,
   const toolExecutions = new Map<string, { name: string; input: any; output: string }>();
 
   messages.forEach((msg) => {
-    if (msg.type === 'user' && msg.toolUseResult) {
-      // Extract tool result info
+    // Extract tool results from user messages (don't rely on toolUseResult flag)
+    if (msg.type === 'user') {
       const content = msg.message.content;
       if (Array.isArray(content)) {
         content.forEach((block: any) => {
@@ -68,7 +68,7 @@ export const MessageList: React.FC<MessageListProps> = ({ messages, isStreaming,
   const displayMessages = messages.filter(msg => {
     if (msg.type === 'progress') return false;
     if (msg.type === 'user') {
-      if (msg.toolUseResult) return false;
+      // Hide user messages that contain tool results
       if (Array.isArray(msg.message.content)) {
         const hasToolResult = msg.message.content.some(
           (block: any) => block.type === 'tool_result'
@@ -117,11 +117,17 @@ export const MessageList: React.FC<MessageListProps> = ({ messages, isStreaming,
       {isStreaming && (
         <Box marginTop={1}>
           {pendingTools.length > 0 ? (
-            <Text bold color={CYAN}>
-              ◉ Executing {pendingTools.length} tool{pendingTools.length > 1 ? 's' : ''}... ({pendingTools.map(t => t.name).join(', ')})
-            </Text>
+            (() => {
+              const lastTool = pendingTools[pendingTools.length - 1];
+              const toolBaseName = lastTool.name.replace(/^mcp__[^_]+__/, '');
+              return (
+                <Text bold color={CYAN}>
+                  ● {toolBaseName} (running...)
+                </Text>
+              );
+            })()
           ) : (
-            <Text bold color={CYAN}>◉ Thinking...</Text>
+            <Text bold color={CYAN}>● Thinking...</Text>
           )}
         </Box>
       )}
@@ -139,8 +145,6 @@ interface MessageItemProps {
 const MessageItemWithTools: React.FC<MessageItemProps> = ({ message, verboseMode, isLastMessage, toolExecutions }) => {
   // Render user message
   if (message.type === 'user') {
-    if (message.toolUseResult) return null;
-
     const content = typeof message.message.content === 'string'
       ? message.message.content
       : JSON.stringify(message.message.content);
@@ -251,7 +255,7 @@ const compactText = (text: string, maxLines: number): { text: string; truncated:
   };
 };
 
-// Tool Execution Display Component
+// Tool Execution Display Component (Claude Code style)
 const ToolExecution: React.FC<{
   toolName: string;
   toolInput: any;
@@ -259,10 +263,79 @@ const ToolExecution: React.FC<{
   isComplete: boolean;
   verboseMode: boolean;
 }> = ({ toolName, toolInput, toolOutput, isComplete, verboseMode }) => {
-  // Only show most relevant input param
-  const inputPreview = toolInput && Object.keys(toolInput).length > 0
-    ? `${Object.keys(toolInput)[0]}: ${String(Object.values(toolInput)[0]).substring(0, 40)}`
-    : '';
+  // Format tool display based on tool type
+  const formatToolDisplay = () => {
+    const toolBaseName = toolName.replace(/^mcp__[^_]+__/, ''); // Remove MCP prefix if present
+
+    // Handle empty or missing input
+    if (!toolInput || typeof toolInput !== 'object') {
+      return toolBaseName;
+    }
+
+    // Format input parameters based on tool type
+    if (toolBaseName === 'Read' || toolBaseName === 'read') {
+      const file = toolInput.file_path || toolInput.path || '';
+      return `Read(${file})`;
+    } else if (toolBaseName === 'Edit' || toolBaseName === 'edit' || toolBaseName === 'Update' || toolBaseName === 'Write') {
+      const file = toolInput.file_path || toolInput.path || '';
+      return `${toolBaseName}(${file})`;
+    } else if (toolBaseName === 'Bash' || toolBaseName === 'bash' || toolBaseName === 'exec') {
+      const cmd = toolInput.command || toolInput.cmd || '';
+      const shortCmd = cmd.length > 50 ? cmd.substring(0, 50) + '...' : cmd;
+      return `Bash(${shortCmd})`;
+    } else if (toolBaseName === 'Grep' || toolBaseName === 'grep' || toolBaseName === 'search') {
+      const pattern = toolInput.pattern || toolInput.query || '';
+      const path = toolInput.path || '.';
+      return `Grep("${pattern}" in ${path})`;
+    } else {
+      // Generic format for other tools
+      const firstParam = Object.keys(toolInput)[0];
+      if (firstParam) {
+        const value = String(toolInput[firstParam]).substring(0, 40);
+        return `${toolBaseName}(${value}${value.length >= 40 ? '...' : ''})`;
+      }
+      return toolBaseName;
+    }
+  };
+
+  // Format output summary based on tool type - returns {summary, totalLines}
+  const formatOutputSummary = (): { summary: string; totalLines: number } | null => {
+    if (!toolOutput) return null;
+
+    const toolBaseName = toolName.replace(/^mcp__[^_]+__/, '');
+    const outputStr = typeof toolOutput === 'string' ? toolOutput : JSON.stringify(toolOutput);
+    const lines = outputStr.split('\n').filter(line => line.trim());
+
+    // In verbose mode, show EVERYTHING - no summaries or truncation
+    if (verboseMode) {
+      return {
+        summary: lines.join('\n'),
+        totalLines: 0 // No remaining lines to show
+      };
+    }
+
+    // In compact mode, show summaries
+    if (toolBaseName === 'Read' || toolBaseName === 'read') {
+      return { summary: `Read ${lines.length} lines`, totalLines: 0 };
+    } else if (toolBaseName === 'Edit' || toolBaseName === 'edit' || toolBaseName === 'Update') {
+      const file = toolInput.file_path || toolInput.path || 'file';
+      return { summary: `Updated ${file} with changes`, totalLines: 0 };
+    } else if (toolBaseName === 'Write') {
+      const file = toolInput.file_path || toolInput.path || 'file';
+      return { summary: `Created ${file} (${lines.length} lines)`, totalLines: 0 };
+    } else if (toolBaseName === 'Grep' || toolBaseName === 'grep' || toolBaseName === 'search') {
+      const matches = lines.filter(l => l.includes(':')).length;
+      return { summary: `Found ${matches} match${matches !== 1 ? 'es' : ''}`, totalLines: 0 };
+    } else if (toolBaseName === 'Bash' || toolBaseName === 'bash' || toolBaseName === 'exec') {
+      // Show first 3 lines of output in compact mode
+      const displayLines = lines.slice(0, 3);
+      return {
+        summary: displayLines.join('\n'),
+        totalLines: lines.length
+      };
+    }
+    return null;
+  };
 
   // Check if output is AnsiOutput
   const hasAnsiOutput = toolOutput && isAnsiOutput(toolOutput);
@@ -270,43 +343,65 @@ const ToolExecution: React.FC<{
   return (
     <Box flexDirection="column" paddingLeft={2} marginTop={0}>
       <Box>
-        <Text color={CYAN}>⚙ {toolName}</Text>
-        {inputPreview && !verboseMode && (
-          <Text color={DIM_WHITE} dimColor> • {inputPreview}...</Text>
-        )}
+        <Text color={CYAN}>● {formatToolDisplay()}</Text>
         {!isComplete && (
-          <Text color={CYAN}> (running...)</Text>
+          <Text color={DIM_WHITE} dimColor> (running...)</Text>
         )}
       </Box>
-      {isComplete && verboseMode && toolOutput && (
+      {isComplete && toolOutput && (
         <Box paddingLeft={2} marginTop={0}>
-          {hasAnsiOutput ? (
-            // Render ANSI output with formatting
-            <AnsiOutputText
-              output={toolOutput as AnsiOutput}
-              maxLines={verboseMode ? 10 : 3}
-            />
-          ) : (
-            // Render plain text output
-            (() => {
-              const outputStr = typeof toolOutput === 'string' ? toolOutput : JSON.stringify(toolOutput);
-              const outputLines = outputStr.split('\n').filter(line => line.trim());
-              const maxOutputLines = verboseMode ? 10 : 3;
-              const truncatedOutput = outputLines.slice(0, maxOutputLines).join('\n');
-              const hasMore = outputLines.length > maxOutputLines;
+          <Box>
+            <Text color={DIM_WHITE}>⎿ </Text>
+            {(() => {
+              const result = formatOutputSummary();
+              if (result) {
+                const { summary, totalLines } = result;
+                const summaryLines = summary.split('\n');
+                const displayedCount = summaryLines.length;
+                const remainingLines = totalLines > displayedCount ? totalLines - displayedCount : 0;
 
-              return (
-                <>
-                  <Text color={DIM_WHITE} dimColor>{truncatedOutput}</Text>
-                  {hasMore && (
-                    <Text color={DIM_WHITE} dimColor>
-                      ... (+{outputLines.length - maxOutputLines} more)
-                    </Text>
-                  )}
-                </>
-              );
-            })()
-          )}
+                return (
+                  <Box flexDirection="column">
+                    <Text color={DIM_WHITE}>{summary}</Text>
+                    {remainingLines > 0 && (
+                      <Text color={DIM_WHITE} dimColor>
+                        … +{remainingLines} lines
+                      </Text>
+                    )}
+                  </Box>
+                );
+              }
+
+              // Fallback to original display for unknown tools
+              if (hasAnsiOutput) {
+                return (
+                  <AnsiOutputText
+                    output={toolOutput as AnsiOutput}
+                    maxLines={verboseMode ? 999999 : 3}  // Show all lines in verbose mode
+                  />
+                );
+              } else {
+                const outputStr = typeof toolOutput === 'string' ? toolOutput : JSON.stringify(toolOutput);
+                const outputLines = outputStr.split('\n').filter(line => line.trim());
+
+                // In verbose mode, show ALL lines; in compact mode, show 3
+                const maxOutputLines = verboseMode ? outputLines.length : 3;
+                const displayLines = outputLines.slice(0, maxOutputLines);
+                const remainingLines = outputLines.length - displayLines.length;
+
+                return (
+                  <Box flexDirection="column">
+                    <Text color={DIM_WHITE}>{displayLines.join('\n')}</Text>
+                    {remainingLines > 0 && (
+                      <Text color={DIM_WHITE} dimColor>
+                        … +{remainingLines} lines
+                      </Text>
+                    )}
+                  </Box>
+                );
+              }
+            })()}
+          </Box>
         </Box>
       )}
     </Box>

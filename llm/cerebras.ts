@@ -14,7 +14,7 @@ const CEREBRAS_BASE_URL = 'https://api.cerebras.ai/v1';
 const CEREBRAS_COST_PER_MILLION_TOKENS = 2.0; // Both input and output
 
 // Retry configuration
-const MAX_RETRIES = 3;
+const MAX_RETRIES = 2; // 1-2 retries max as requested
 const BASE_DELAY_MS = 1000; // 1 second base delay
 const MAX_DELAY_MS = 60000; // 60 seconds max delay
 
@@ -38,6 +38,313 @@ async function sleep(ms: number): Promise<void> {
 }
 
 /**
+ * COMPREHENSIVE DATA CLEANER FOR CEREBRAS
+ * Handles all malformed data issues from Cerebras/Qwen:
+ * - Double-escaped JSON arrays
+ * - Python dict formats
+ * - Fragmented messages
+ * - Unicode issues
+ * - Null/undefined values
+ * - Unescaped quotes in natural text
+ */
+function cleanDataForCerebras(data: any): any {
+  // Handle null/undefined
+  if (data === null || data === undefined) {
+    return '';
+  }
+
+  // If it's a string, clean it thoroughly
+  if (typeof data === 'string') {
+    let cleaned = data;
+
+    // 0. CRITICAL FIX: First normalize smart quotes and problematic characters
+    // This prevents issues with curly quotes, apostrophes, etc.
+    cleaned = cleaned
+      .replace(/[\u201C\u201D]/g, '"')  // Smart double quotes → standard "
+      .replace(/[\u2018\u2019]/g, "'")  // Smart single quotes → standard '
+      .replace(/[\u2032\u2033]/g, "'")  // Prime symbols → standard '
+      .replace(/\u2026/g, '...')        // Ellipsis → three dots
+      .replace(/[\u2013\u2014]/g, '-'); // En/em dashes → hyphen
+
+    // 1. Handle double-escaped JSON
+    // Check if it looks like double-escaped JSON
+    if (cleaned.includes('\\\\') || cleaned.includes('\\"')) {
+      try {
+        // Try to parse as JSON multiple times to handle double/triple escaping
+        let parsed = cleaned;
+        let attempts = 0;
+        while (attempts < 3 && (parsed.includes('\\\\') || parsed.includes('\\"'))) {
+          try {
+            parsed = JSON.parse(`"${parsed}"`); // Parse as escaped string
+          } catch {
+            break;
+          }
+          attempts++;
+        }
+        if (parsed !== cleaned) {
+          cleaned = parsed;
+        }
+      } catch {
+        // If parsing fails, manually unescape
+        cleaned = cleaned
+          .replace(/\\\\/g, '\\')
+          .replace(/\\"/g, '"')
+          .replace(/\\n/g, '\n')
+          .replace(/\\r/g, '\r')
+          .replace(/\\t/g, '\t');
+      }
+    }
+
+    // 2. Handle Python dict format
+    // Look for Python-style dict indicators
+    if (cleaned.includes("'") && (cleaned.includes(': ') || cleaned.includes("={'") || cleaned.includes("': '"))) {
+      // Try to convert Python dict to JSON
+      // Replace single quotes with double quotes, but be careful with apostrophes in text
+      const pythonDictPattern = /(\{[^}]*\}|\[[^\]]*\])/g;
+      cleaned = cleaned.replace(pythonDictPattern, (match) => {
+        // Only process if it looks like a dict/list
+        if ((match.includes("'") && match.includes(':')) || (match.startsWith('[') && match.includes("'"))) {
+          return match
+            .replace(/'/g, '"') // Replace single quotes
+            .replace(/True/g, 'true')  // Python True -> JSON true
+            .replace(/False/g, 'false') // Python False -> JSON false
+            .replace(/None/g, 'null');  // Python None -> JSON null
+        }
+        return match;
+      });
+    }
+
+    // 3. Clean Unicode and special characters
+    cleaned = cleaned
+      // Remove broken Unicode characters (surrogate pairs)
+      .replace(/[\uD800-\uDFFF]/g, '') // Remove lone surrogates
+      .replace(/[^\x00-\x7F\u0080-\uFFFF]/g, '') // Remove invalid chars
+      .replace(/\uFFFD/g, '') // Remove replacement character
+      // Replace box drawing characters with simple alternatives
+      .replace(/[\u2500-\u257F]/g, '-') // Box drawing chars
+      .replace(/[╔╗╚╝║═╠╣╬]/g, '-') // Extended box chars
+      // Remove other problematic characters
+      .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, ''); // Control characters (except \t, \n, \r)
+
+    // 4. Handle fragmented content
+    // If content looks fragmented (e.g., incomplete JSON), try to clean it up
+    if (cleaned.startsWith('{') && !cleaned.endsWith('}')) {
+      // Incomplete JSON object
+      cleaned = cleaned + '}';
+    } else if (cleaned.startsWith('[') && !cleaned.endsWith(']')) {
+      // Incomplete JSON array
+      cleaned = cleaned + ']';
+    }
+
+    // 5. Final validation - if it's supposed to be JSON, validate it
+    if ((cleaned.startsWith('{') && cleaned.endsWith('}')) ||
+        (cleaned.startsWith('[') && cleaned.endsWith(']'))) {
+      try {
+        const parsed = JSON.parse(cleaned);
+        // If it parses successfully, re-stringify to ensure consistency
+        cleaned = JSON.stringify(parsed);
+      } catch {
+        // If it doesn't parse, it's probably just text that happens to start/end with brackets
+      }
+    }
+
+    return cleaned;
+  }
+
+  // If it's an object or array, recursively clean all values
+  if (typeof data === 'object') {
+    if (Array.isArray(data)) {
+      return data.map(item => cleanDataForCerebras(item));
+    } else {
+      const cleaned: any = {};
+      for (const [key, value] of Object.entries(data)) {
+        // Clean the key too (in case it has issues)
+        const cleanKey = typeof key === 'string' ? cleanDataForCerebras(key) : key;
+        cleaned[cleanKey] = cleanDataForCerebras(value);
+      }
+      return cleaned;
+    }
+  }
+
+  // For other types (numbers, booleans), return as-is
+  return data;
+}
+
+/**
+ * Sanitize string content to ensure it's safe for JSON serialization
+ * This is a critical fix for the 400 error issue with malformed quotes
+ */
+function sanitizeForJSON(str: string): string {
+  if (typeof str !== 'string') return str;
+
+  // CRITICAL: The main issue is unescaped quotes in natural text
+  // We need to ensure all special JSON characters are properly escaped
+
+  // First, normalize the string by unescaping any existing escapes to avoid double-escaping
+  let normalized = str;
+
+  // Then properly escape for JSON
+  // We use JSON.stringify and then remove the wrapping quotes to get properly escaped content
+  try {
+    // JSON.stringify will properly escape all special characters
+    const jsonSafe = JSON.stringify(normalized);
+    // Remove the wrapping quotes that JSON.stringify adds
+    return jsonSafe.slice(1, -1);
+  } catch (error) {
+    // Fallback: manual escaping if JSON.stringify fails
+    return normalized
+      .replace(/\\/g, '\\\\')   // Backslash must be first
+      .replace(/"/g, '\\"')     // Escape double quotes
+      .replace(/\n/g, '\\n')    // Escape newlines
+      .replace(/\r/g, '\\r')    // Escape carriage returns
+      .replace(/\t/g, '\\t')    // Escape tabs
+      .replace(/\f/g, '\\f')    // Escape form feeds
+      .replace(/\b/g, '\\b');   // Escape backspaces
+  }
+}
+
+/**
+ * Validate and prepare a message for Cerebras API
+ * CRITICAL: This is for OUTGOING messages TO Cerebras, NOT for cleaning responses FROM Cerebras
+ */
+function cleanMessageForCerebras(message: any): any {
+  // Create a deep copy to avoid mutation
+  const cleaned = JSON.parse(JSON.stringify(message));
+
+  // CRITICAL: For outgoing messages, we should NOT aggressively clean content
+  // The content is already properly formatted from our side
+  // We only need to ensure it's not null/undefined
+
+  // Ensure content is never empty for assistant messages with tool calls
+  if (cleaned.role === 'assistant' && cleaned.tool_calls && (!cleaned.content || cleaned.content === '')) {
+    cleaned.content = ' '; // Use space to avoid empty string issues
+  }
+
+  // Ensure user/system messages have content
+  if ((cleaned.role === 'user' || cleaned.role === 'system') && !cleaned.content) {
+    cleaned.content = '';
+  }
+
+  // Clean tool calls if present
+  if (cleaned.tool_calls) {
+    cleaned.tool_calls = cleaned.tool_calls.map((tc: any) => {
+      const cleanedTc = { ...tc };
+      if (cleanedTc.function?.arguments) {
+        // CRITICAL FIX: DO NOT over-process tool arguments
+        // They should already be a valid JSON string from the conversion above
+
+        // If it's not a string, stringify it
+        if (typeof cleanedTc.function.arguments !== 'string') {
+          cleanedTc.function.arguments = JSON.stringify(cleanedTc.function.arguments);
+        } else {
+          // CRITICAL: Just validate it's valid JSON, but DON'T clean/re-process it
+          // This prevents over-escaping
+          try {
+            JSON.parse(cleanedTc.function.arguments);
+            // It's valid - leave it as-is
+          } catch (error) {
+            // Only if it's invalid, try to fix by parsing and re-stringifying ONCE
+            console.error(`⚠️  Invalid JSON in tool arguments for ${cleanedTc.function?.name}, attempting single fix...`);
+            try {
+              // Parse and re-stringify ONCE - no cleaning
+              const parsed = JSON.parse(cleanedTc.function.arguments);
+              cleanedTc.function.arguments = JSON.stringify(parsed);
+            } catch {
+              // If still fails, it's truly malformed - log and keep as-is
+              console.error(`❌ Cannot fix tool arguments for ${cleanedTc.function?.name}:`, cleanedTc.function.arguments);
+            }
+          }
+        }
+      }
+      return cleanedTc;
+    });
+  }
+
+  // For tool messages, ensure content is not empty
+  // Tool responses might contain raw output that needs basic sanitization
+  if (cleaned.role === 'tool') {
+    // Ensure tool responses are never empty
+    if (!cleaned.content || cleaned.content === '') {
+      cleaned.content = 'Tool executed successfully';
+    }
+    // Tool content is already a string from tool execution - leave it as-is
+    // JSON.stringify will handle any special characters during serialization
+  }
+
+  return cleaned;
+}
+
+/**
+ * Validate that request parameters can be safely serialized to JSON
+ * This prevents 400 errors from malformed JSON
+ */
+function validateRequestJSON(requestParams: any): { valid: true } | { valid: false; error: string; location: string } {
+  try {
+    // Try to stringify the entire request
+    const serialized = JSON.stringify(requestParams);
+
+    // Try to parse it back to ensure it's valid
+    JSON.parse(serialized);
+
+    // Validate individual messages
+    if (requestParams.messages) {
+      for (let i = 0; i < requestParams.messages.length; i++) {
+        const msg = requestParams.messages[i];
+
+        // Check content field
+        if (msg.content !== undefined && msg.content !== null) {
+          try {
+            // Ensure content can be serialized
+            JSON.stringify(msg.content);
+          } catch (error) {
+            return {
+              valid: false,
+              error: `Message #${i + 1} content cannot be serialized: ${error}`,
+              location: `messages[${i}].content`
+            };
+          }
+        }
+
+        // Check tool_calls if present
+        if (msg.tool_calls) {
+          for (let j = 0; j < msg.tool_calls.length; j++) {
+            const tc = msg.tool_calls[j];
+            if (tc.function?.arguments) {
+              try {
+                // Arguments should be a valid JSON string
+                if (typeof tc.function.arguments === 'string') {
+                  JSON.parse(tc.function.arguments);
+                } else {
+                  return {
+                    valid: false,
+                    error: `Tool call arguments must be a string, got ${typeof tc.function.arguments}`,
+                    location: `messages[${i}].tool_calls[${j}].function.arguments`
+                  };
+                }
+              } catch (error) {
+                return {
+                  valid: false,
+                  error: `Invalid JSON in tool call arguments: ${error}`,
+                  location: `messages[${i}].tool_calls[${j}].function.arguments`
+                };
+              }
+            }
+          }
+        }
+      }
+    }
+
+    return { valid: true };
+  } catch (error) {
+    return {
+      valid: false,
+      error: `Request cannot be serialized to JSON: ${error}`,
+      location: 'requestParams'
+    };
+  }
+}
+
+/**
  * Calculate exponential backoff delay
  */
 function calculateBackoffDelay(attempt: number): number {
@@ -51,6 +358,11 @@ function calculateBackoffDelay(attempt: number): number {
  * Check if error is retryable
  */
 function isRetryableError(error: any): boolean {
+  // Retry on timeout errors (OpenAI SDK throws APIConnectionTimeoutError)
+  if (error.constructor?.name === 'APIConnectionTimeoutError' || error.message?.includes('timed out')) {
+    return true;
+  }
+
   // Retry on connection errors
   if (error.code === 'ECONNRESET' || error.code === 'ETIMEDOUT' || error.code === 'ECONNREFUSED') {
     return true;
@@ -110,9 +422,55 @@ function formatToolsForOpenAI(tools: Tool[]): OpenAI.Chat.ChatCompletionTool[] {
         inputSchema = {
           type: 'object',
           properties: {},
-          required: []
         };
       }
+
+      // CRITICAL FIX: Remove fields that Cerebras might not support
+      // Cerebras/OpenAI may reject schemas with certain JSON Schema keywords
+      const cleanedSchema: any = {
+        type: inputSchema.type,
+        properties: {}, // Will populate below
+      };
+
+      // Clean each property recursively to remove unsupported fields
+      if (inputSchema.properties) {
+        for (const [propName, propSchema] of Object.entries(inputSchema.properties)) {
+          const prop = propSchema as any;
+          const cleanedProp: any = {
+            type: prop.type,
+          };
+
+          // Add description if present
+          if (prop.description) {
+            cleanedProp.description = prop.description;
+          }
+
+          // Add enum if present
+          if (prop.enum) {
+            cleanedProp.enum = prop.enum;
+          }
+
+          // Add items for arrays
+          if (prop.items) {
+            cleanedProp.items = prop.items;
+          }
+
+          // Add properties for nested objects
+          if (prop.properties) {
+            cleanedProp.properties = prop.properties;
+          }
+
+          cleanedSchema.properties[propName] = cleanedProp;
+        }
+      }
+
+      // Only add required if it exists and is non-empty
+      if (inputSchema.required && inputSchema.required.length > 0) {
+        cleanedSchema.required = inputSchema.required;
+      }
+
+      // CRITICAL: additionalProperties, $schema, definitions removed
+      // These might cause Cerebras to reject the request
 
       // Get description (handle both string and function)
       let description = 'A tool';
@@ -129,7 +487,7 @@ function formatToolsForOpenAI(tools: Tool[]): OpenAI.Chat.ChatCompletionTool[] {
         function: {
           name: tool.name,
           description,
-          parameters: inputSchema,
+          parameters: cleanedSchema,
         },
       };
     });
@@ -224,14 +582,13 @@ export async function queryCerebras(
               continue;
             }
 
-            // CRITICAL: Ensure tool content is never null/undefined
-            let toolContent: string;
-            if (typeof tr.content === 'string' && tr.content.trim()) {
-              toolContent = tr.content;
-            } else if (tr.content !== null && tr.content !== undefined) {
-              const jsonStr = JSON.stringify(tr.content);
-              toolContent = (jsonStr && jsonStr !== 'null') ? jsonStr : 'Tool executed successfully';
-            } else {
+            // CRITICAL FIX: Tool content is already clean - don't over-process it
+            // Tool responses come from our own tools, not from Cerebras
+            let toolContent = tr.content || '';
+            if (typeof toolContent !== 'string') {
+              toolContent = JSON.stringify(toolContent);
+            }
+            if (!toolContent || toolContent === '') {
               toolContent = 'Tool executed successfully';
             }
 
@@ -250,6 +607,7 @@ export async function queryCerebras(
               .map((item: any) => typeof item === 'string' ? item : item.text)
               .join('\n');
             if (textStr.trim()) {
+              // CRITICAL FIX: Don't clean user content - it's already properly formatted
               apiMessages.push({
                 role: 'user',
                 content: textStr,
@@ -280,6 +638,8 @@ export async function queryCerebras(
         userContent = JSON.stringify(content);
       }
 
+      // CRITICAL FIX: Don't clean user content - it's already properly formatted
+      // JSON.stringify will handle any special characters during final serialization
       apiMessages.push({
         role: 'user',
         content: userContent,
@@ -304,14 +664,19 @@ export async function queryCerebras(
           }
           return true;
         })
-        .map((c: any) => ({
-          id: c.id,
-          type: 'function' as const,
-          function: {
-            name: c.name,
-            arguments: JSON.stringify(c.input || {}), // Default to empty object if input is null
-          },
-        }));
+        .map((c: any) => {
+          // CRITICAL FIX: DO NOT clean tool input - it's already a proper object
+          // Just stringify it directly to avoid over-escaping
+          const toolInput = c.input || {};
+          return {
+            id: c.id,
+            type: 'function' as const,
+            function: {
+              name: c.name,
+              arguments: JSON.stringify(toolInput), // Direct stringify - NO cleaning
+            },
+          };
+        });
 
       // Extract text content
       const textContent = contentArray
@@ -320,16 +685,27 @@ export async function queryCerebras(
         .join('\n');
 
       if (toolCalls.length > 0) {
-        // When there are tool calls, follow llxprt approach:
-        // Use null for content when there's no text (not omitted, not empty string)
-        const trimmedContent = textContent.trim();
+        // When there are tool calls:
+        // CRITICAL: OpenAI/Cerebras API requires content when tool_calls present
+        // CRITICAL FIX: Don't clean assistant content - it's already properly formatted
+        const trimmedTextContent = textContent.trim();
 
-        apiMessages.push({
+        const msgContent: any = {
           role: 'assistant',
-          content: trimmedContent || null,
           tool_calls: toolCalls,
-        });
+        };
+
+        // Only include content if it's not empty
+        if (trimmedTextContent) {
+          msgContent.content = trimmedTextContent;
+        } else {
+          // Don't omit content field - set to space to avoid API issues
+          msgContent.content = ' ';
+        }
+
+        apiMessages.push(msgContent);
       } else {
+        // CRITICAL FIX: Don't clean assistant content - it's already properly formatted
         apiMessages.push({
           role: 'assistant',
           content: textContent || 'No response',
@@ -344,15 +720,19 @@ export async function queryCerebras(
   // Format tools
   const apiTools = formatToolsForOpenAI(tools);
 
+  // COMPREHENSIVE FINAL CLEANING: Clean all messages before sending to Cerebras
+  // This ensures we never send malformed data regardless of what Cerebras sent us
+  const cleanedApiMessages = apiMessages.map(msg => cleanMessageForCerebras(msg));
+
   const startTime = Date.now();
   const timestamp = Date.now();
 
   // Build request params (outside try block so we can log it on error)
   // CRITICAL: Following llxprt-code pattern for Cerebras/Qwen compatibility
   // Reference: https://github.com/vybestack/llxprt-code OpenAIProvider.ts:742-755
-  const requestParams: any = {
+  let requestParams: any = {
     model,
-    messages: apiMessages,
+    messages: cleanedApiMessages,  // Use cleaned messages
     temperature: options.temperature ?? 0.7,
     top_p: options.top_p ?? 0.8,
     // Don't set max_tokens - let Cerebras use its default
@@ -367,6 +747,65 @@ export async function queryCerebras(
       : {}),
   }
 
+  // REQUEST SIZE VALIDATION: Check and reduce request size if needed
+  // Cerebras API has undocumented size limits (~1-2MB JSON payload)
+  const requestJson = JSON.stringify(requestParams);
+  const requestSizeBytes = requestJson.length;
+  const requestSizeKB = (requestSizeBytes / 1024).toFixed(2);
+  const requestSizeMB = (requestSizeBytes / (1024 * 1024)).toFixed(2);
+  const MAX_REQUEST_SIZE_BYTES = 1_500_000; // 1.5MB conservative limit
+
+  // Log telemetry for all requests
+  // console.error(`📊 [Request Stats] ${requestParams.messages.length} messages, ${requestSizeKB}KB payload`);
+
+  if (requestSizeBytes > MAX_REQUEST_SIZE_BYTES) {
+    console.error(`⚠️  [Request Size Limit] Request size ${requestSizeMB}MB exceeds safe limit of ${(MAX_REQUEST_SIZE_BYTES / (1024 * 1024)).toFixed(2)}MB`);
+    console.error(`   Applying aggressive context reduction...`);
+
+    // Keep system message + progressively fewer recent messages
+    const systemMsg = requestParams.messages.find((m: any) => m.role === 'system');
+    const nonSystemMessages = requestParams.messages.filter((m: any) => m.role !== 'system');
+
+    // Try reducing to 10, then 6, then 4 messages
+    for (const targetCount of [10, 6, 4]) {
+      const reducedMessages = nonSystemMessages.slice(-targetCount);
+      const testParams = {
+        ...requestParams,
+        messages: systemMsg ? [systemMsg, ...reducedMessages] : reducedMessages,
+      };
+      const testSize = JSON.stringify(testParams).length;
+
+      if (testSize <= MAX_REQUEST_SIZE_BYTES) {
+        requestParams = testParams;
+        const newSizeKB = (testSize / 1024).toFixed(2);
+        console.error(`   ✅ Reduced to ${targetCount} messages (${newSizeKB}KB)`);
+        break;
+      }
+    }
+
+    // Final check
+    const finalSize = JSON.stringify(requestParams).length;
+    if (finalSize > MAX_REQUEST_SIZE_BYTES) {
+      console.error(`   ⚠️  Still over limit after reduction. Request may fail.`);
+    }
+  }
+
+  // CRITICAL VALIDATION: Ensure request can be safely serialized to JSON
+  // This prevents 400 errors from malformed JSON before sending to API
+  const validationResult = validateRequestJSON(requestParams);
+  if (!validationResult.valid) {
+    // Type narrowing: TypeScript now knows validationResult has error and location properties
+    const failedResult = validationResult as { valid: false; error: string; location: string };
+    console.error('\n❌ === REQUEST VALIDATION FAILED ===');
+    console.error('Error:', failedResult.error);
+    console.error('Location:', failedResult.location);
+    console.error('\nProblematic request params:');
+    console.error(JSON.stringify(requestParams, null, 2));
+    console.error('=== END VALIDATION ERROR ===\n');
+
+    throw new Error(`Request validation failed at ${failedResult.location}: ${failedResult.error}`);
+  }
+
   try {
     // ALWAYS save requests for debugging - we need to see what's failing
     const filename = `/tmp/cerebras-request-${timestamp}-${requestParams.messages.length}msg.json`;
@@ -374,7 +813,7 @@ export async function queryCerebras(
       await import('fs').then(fs =>
         fs.promises.writeFile(filename, JSON.stringify(requestParams, null, 2))
       );
-      console.error(`🔍 [${new Date().toISOString()}] Saved ${requestParams.messages.length}-message request to ${filename}`);
+      // console.error(`🔍 [${new Date().toISOString()}] Saved ${requestParams.messages.length}-message request to ${filename}`);
     } catch (e) {
       console.error(`Failed to save request: ${e}`);
     }
@@ -463,11 +902,113 @@ export async function queryCerebras(
       } catch (error: any) {
         lastError = error;
 
-        // Check if we should retry
+        const errorType = error.constructor?.name || 'Error';
+        const status = error.status || error.response?.status || 'N/A';
+
+        // CRITICAL: Log response body if available for 400 errors
+        if (status === 400) {
+          console.error(`\n❌ [${new Date().toISOString()}] 400 Bad Request Error - FULL DEBUGGING:`);
+          console.error(`   Error Type: ${errorType}`);
+          console.error(`   Message: ${error.message}`);
+
+          // Try to extract actual error from response
+          if (error.response?.data) {
+            console.error('   Response Data:', JSON.stringify(error.response.data, null, 2));
+          }
+          if (error.error) {
+            console.error('   Error Object:', JSON.stringify(error.error, null, 2));
+          }
+
+          // Log the malformed request details
+          console.error(`\n   Request Summary:`);
+          console.error(`   - Request Size: ${JSON.stringify(requestParams).length} bytes`);
+          console.error(`   - Message Count: ${requestParams.messages.length}`);
+          console.error(`   - Tool Count: ${requestParams.tools?.length || 0}`);
+
+          // CRITICAL: Show the FULL request being sent
+          console.error(`\n   🔍 FULL REQUEST PAYLOAD:`);
+          console.error(JSON.stringify(requestParams, null, 2));
+
+          // ENHANCED: Analyze each message for potential issues
+          console.error(`\n   📋 DETAILED MESSAGE-BY-MESSAGE ANALYSIS:`);
+          console.error(`   ============================================`);
+          requestParams.messages.forEach((msg: any, idx: number) => {
+            console.error(`\n   📧 MESSAGE #${idx + 1} of ${requestParams.messages.length} - ROLE: ${msg.role}`);
+            console.error(`   ${'─'.repeat(60)}`);
+
+            // Check content
+            if (msg.content !== undefined) {
+              const contentStr = typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content);
+              const contentLen = contentStr.length;
+
+              console.error(`   📝 Content (${contentLen} chars):`);
+              console.error(`   ${contentStr.substring(0, 500)}${contentLen > 500 ? '...[TRUNCATED]' : ''}`);
+              console.error(``);
+
+              // Look for problematic patterns
+              const hasUnescapedQuotes = contentStr.match(/[^\\]"/g);
+              const hasSingleQuotes = contentStr.includes("'");
+              const hasNewlines = contentStr.includes('\n');
+              const hasBackslashes = contentStr.includes('\\');
+
+              // Flag potential issues
+              const warnings = [];
+              if (hasUnescapedQuotes) warnings.push('⚠️  Potentially unescaped quotes');
+              if (hasSingleQuotes) warnings.push('ℹ️  Single quotes/apostrophes');
+              if (hasNewlines) warnings.push('ℹ️  Newlines');
+              if (hasBackslashes) warnings.push('⚠️  Backslashes (check escaping)');
+
+              if (warnings.length > 0) {
+                console.error(`   🔍 Flags: ${warnings.join(' | ')}`);
+              }
+            } else {
+              console.error(`   📝 Content: <undefined>`);
+            }
+
+            // Check tool_calls
+            if (msg.tool_calls) {
+              console.error(`   🛠️  Tool Calls (${msg.tool_calls.length}):`);
+              msg.tool_calls.forEach((tc: any, tcIdx: number) => {
+                console.error(`     [${tcIdx + 1}] ${tc.function?.name} (id: ${tc.id})`);
+                if (tc.function?.arguments) {
+                  console.error(`         Arguments: ${tc.function.arguments}`);
+                  try {
+                    JSON.parse(tc.function.arguments);
+                    console.error(`         ✓ Valid JSON`);
+                  } catch (e) {
+                    console.error(`         ❌ INVALID JSON: ${e}`);
+                    console.error(`         ⚠️  THIS IS LIKELY THE ISSUE!`);
+                  }
+                }
+              });
+            }
+
+            // Check tool_call_id for tool messages
+            if (msg.role === 'tool' && msg.tool_call_id) {
+              console.error(`   🔗 Tool Call ID: ${msg.tool_call_id}`);
+            }
+          });
+          console.error(`\n   ============================================`);
+
+          console.error(`\n   💡 Common 400 Error Causes:`);
+          console.error(`   1. Unescaped quotes in message content (e.g., "project"s" instead of "project's")`);
+          console.error(`   2. Invalid JSON in tool call arguments`);
+          console.error(`   3. Malformed message structure`);
+          console.error(`   4. Invalid characters in content`);
+        }
+
+        // SIMPLE 400 RETRY: Just retry 1-2 times without complex logic
+        if (status === 400 && attempt < MAX_RETRIES) {
+          const delay = calculateBackoffDelay(attempt);
+          console.error(`\n⚠️  400 Bad Request Error (attempt ${attempt + 1}/${MAX_RETRIES + 1})`);
+          console.error(`   Retrying in ${(delay / 1000).toFixed(1)}s...\n`);
+          await sleep(delay);
+          continue;
+        }
+
+        // Check if we should retry for other retryable errors
         if (attempt < MAX_RETRIES && isRetryableError(error)) {
           const delay = calculateBackoffDelay(attempt);
-          const errorType = error.constructor?.name || 'Error';
-          const status = error.status || error.response?.status || 'N/A';
           const nextTimeout = TIMEOUT_MS_BY_ATTEMPT[attempt + 1] || TIMEOUT_MS_BY_ATTEMPT[TIMEOUT_MS_BY_ATTEMPT.length - 1];
 
           console.error(`\n⚠️  Cerebras API Error (attempt ${attempt + 1}/${MAX_RETRIES + 1})`);
@@ -495,7 +1036,7 @@ export async function queryCerebras(
       await import('fs').then(fs =>
         fs.promises.writeFile(responseFilename, JSON.stringify(response, null, 2))
       );
-      console.error(`✅ [${new Date().toISOString()}] Saved response to ${responseFilename}`);
+      // console.error(`✅ [${new Date().toISOString()}] Saved response to ${responseFilename}`);
     } catch (e) {
       console.error(`Failed to save response: ${e}`);
     }
@@ -533,7 +1074,7 @@ export async function queryCerebras(
 
         if (choice.message.tool_calls && choice.message.tool_calls.length > 0) {
           console.error('\n🛠️  Tool Calls in Response:', choice.message.tool_calls.length);
-          choice.message.tool_calls.forEach((tc, idx) => {
+          choice.message.tool_calls.forEach((tc: any, idx: number) => {
             console.error(`  [${idx + 1}] ${tc.function.name} (id: ${tc.id})`);
             console.error(`      Args: ${tc.function.arguments}`);
           });

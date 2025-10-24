@@ -59,6 +59,7 @@
   ],
   "dependencies": {
     "@anthropic-ai/sdk": "^0.63.1",
+    "@cerebras/cerebras_cloud_sdk": "^1.56.1",
     "@modelcontextprotocol/sdk": "^1.18.2",
     "@types/react": "^19.1.13",
     "@xterm/headless": "^5.5.0",
@@ -70,6 +71,7 @@
     "ink-select-input": "^6.0.0",
     "ink-text-input": "^6.0.0",
     "lodash-es": "^4.17.21",
+    "nanoid": "^5.1.6",
     "node-pty": "^1.0.0",
     "openai": "^4.77.0",
     "ora": "^9.0.0",
