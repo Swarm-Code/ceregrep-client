@@ -884,6 +884,10 @@ export const App: React.FC<AppProps> = ({ initialConversationId, initialAgentId,
                   <Text color={WHITE}>  Compress long conversations</Text>
                   <Text color={CYAN}>Ctrl+O</Text>
                   <Text color={WHITE}>  Toggle detailed/compact view</Text>
+                  <Text color={CYAN}>Ctrl+R</Text>
+                  <Text color={WHITE}>  Search prompt history</Text>
+                  <Text color={CYAN}>↑/↓ Arrows</Text>
+                  <Text color={WHITE}>  Navigate prompt history</Text>
                   <Text color={CYAN}>Escape</Text>
                   <Text color={WHITE}>  Stop the AI mid-response</Text>
                 </Box>
@@ -1000,6 +1004,17 @@ export const App: React.FC<AppProps> = ({ initialConversationId, initialAgentId,
           <BranchSelector
             conversation={conversation}
             onSelect={handleBranchSelect}
+            onCancel={() => setView('chat')}
+          />
+        )}
+
+        {view === 'promptSearch' && (
+          <PromptSearch
+            prompts={promptHistory}
+            onSelect={(text) => {
+              setInputValue(text);
+              setView('chat');
+            }}
             onCancel={() => setView('chat')}
           />
         )}
