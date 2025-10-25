@@ -167,7 +167,6 @@ export class StreamRenderer {
       const text = (textBlock as any).text;
       if (text && text.trim()) {
         console.log(chalk.white(text.trim()));
-        console.log(); // Blank line
       }
     }
 
@@ -276,8 +275,6 @@ export class StreamRenderer {
           }
         }
       }
-
-      console.log(); // Blank line
     }
 
     if (this.currentToolCount > 0) {
@@ -419,11 +416,8 @@ export class StreamRenderer {
     if (!this.verbose) {
       console.log(response);
     } else {
-      console.log();
       console.log(chalk.bold.greenBright('Response:'));
-      console.log();
       console.log(chalk.white(response));
-      console.log();
     }
   }
 
@@ -452,7 +446,7 @@ export class StreamRenderer {
     const cachedPercent = stats.total > 0 ? ((stats.cached / stats.total) * 100).toFixed(1) : '0.0';
 
     console.log(
-      chalk.dim('\nℹ Token Usage: ') +
+      chalk.dim('ℹ Token Usage: ') +
       chalk.white(`${stats.total.toLocaleString()} total `) +
       chalk.dim('(') +
       chalk.cyan(`${stats.input.toLocaleString()} in`) +

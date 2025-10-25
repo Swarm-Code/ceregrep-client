@@ -542,6 +542,9 @@ export async function queryCerebras(
 
   // Add system prompt
   if (systemPrompt.length > 0) {
+    // CRITICAL: DO NOT sanitize here!
+    // JSON.stringify() will handle all escaping when we serialize the full request
+    // Calling sanitizeForJSON() here causes double-escaping (escape → remove quotes → escape again)
     apiMessages.push({
       role: 'system',
       content: systemPrompt.join('\n\n'),
