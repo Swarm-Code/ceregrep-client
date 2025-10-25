@@ -21,6 +21,9 @@ swarm-client/
 debug-*.log
 *.debug.log
 
+# MITM debug logs (API request/response traces)
+debug/mitm/logs/
+
 # Test files and scripts
 test-*.ts
 test-*.sh
