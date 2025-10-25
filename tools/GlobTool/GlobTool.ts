@@ -103,7 +103,7 @@ export const GlobTool = {
     const stats = await Promise.all(files.map((file: string) => stat(file)));
     const matches = files
       .map((file: string, i: number) => [file, stats[i]!] as const)
-      .sort((a, b) => {
+      .sort((a: readonly [string, import('fs').Stats], b: readonly [string, import('fs').Stats]) => {
         if (process.env.NODE_ENV === 'test') {
           return a[0].localeCompare(b[0]);
         }

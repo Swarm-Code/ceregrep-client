@@ -20,7 +20,7 @@ import {
   extname,
   join,
 } from 'path'
-import { glob as globLib } from 'glob'
+import { glob as globLib, Path } from 'glob'
 import { cwd } from 'process'
 import { listAllContentFiles } from './ripgrep.js'
 import { LRUCache } from 'lru-cache'
@@ -48,12 +48,12 @@ export async function glob(
     stat: true,
     withFileTypes: true,
   })
-  const sortedPaths = paths.sort((a, b) => (a.mtimeMs ?? 0) - (b.mtimeMs ?? 0))
+  const sortedPaths = paths.sort((a: Path, b: Path) => (a.mtimeMs ?? 0) - (b.mtimeMs ?? 0))
   const truncated = sortedPaths.length > offset + limit
   return {
     files: sortedPaths
       .slice(offset, offset + limit)
-      .map(path => path.fullpath()),
+      .map((path: Path) => path.fullpath()),
     truncated,
   }
 }
@@ -146,7 +146,7 @@ export function writeTextContent(
 }
 
 const repoEndingCache = new LRUCache<string, LineEndingType>({
-  fetchMethod: path => detectRepoLineEndingsDirect(path),
+  fetchMethod: (path: string) => detectRepoLineEndingsDirect(path),
   ttl: 5 * 60 * 1000,
   ttlAutopurge: false,
   max: 1000,
@@ -194,7 +194,7 @@ function fetch<K extends {}, V extends {}>(
 }
 
 const fileEncodingCache = new LRUCache<string, BufferEncoding>({
-  fetchMethod: path => detectFileEncodingDirect(path),
+  fetchMethod: (path: string) => detectFileEncodingDirect(path),
   ttl: 5 * 60 * 1000,
   ttlAutopurge: false,
   max: 1000,
@@ -238,7 +238,7 @@ export function detectFileEncodingDirect(filePath: string): BufferEncoding {
 }
 
 const lineEndingCache = new LRUCache<string, LineEndingType>({
-  fetchMethod: path => detectLineEndingsDirect(path),
+  fetchMethod: (path: string) => detectLineEndingsDirect(path),
   ttl: 5 * 60 * 1000,
   ttlAutopurge: false,
   max: 1000,
