@@ -114,10 +114,21 @@ class CeregrepQueryTool(BaseTool):
                 )]
 
             if process.returncode != 0:
-                error_msg = stderr.decode() if stderr else "Unknown error"
+                error_output = stderr.decode() if stderr else "Unknown error"
+                # Extract last meaningful error line from verbose output
+                error_lines = [line.strip() for line in error_output.strip().split('\n') if line.strip()]
+                last_error = error_lines[-1] if error_lines else "Unknown error"
+
                 return [TextContent(
                     type="text",
-                    text=f"Scout query failed: {error_msg}"
+                    text=(
+                        f"❌ **Scout Query Failed**\n\n"
+                        f"**Query:** {query}\n"
+                        f"**Error:** {last_error}\n\n"
+                        f"**Full Verbose Output:**\n"
+                        f"```\n{error_output}\n```\n\n"
+                        f"**Debug Logs:** Check `debug/mitm/logs/` for API request/response traces"
+                    )
                 )]
 
             # Parse output

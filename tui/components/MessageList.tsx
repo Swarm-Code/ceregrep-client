@@ -10,11 +10,13 @@ import { Message, UserMessage, AssistantMessage } from '../../core/messages.js';
 import { extractTextContent, extractToolUseBlocks } from '../../core/messages.js';
 import { AnsiOutputText, isAnsiOutput } from './AnsiOutputText.js';
 import type { AnsiOutput } from '../../utils/terminalSerializer.js';
+import { getTools } from '../../tools/index.js';
 
 interface MessageListProps {
   messages: Message[];
   isStreaming: boolean;
   verboseMode: boolean;
+  tools?: any[]; // Optional tools array for rendering tool results
 }
 
 // Force exact colors (hex) to override terminal themes
@@ -30,31 +32,38 @@ const VERBOSE_MAX_LINES = 50; // Even in verbose mode, cap at 50 lines
 const MAX_TEXT_LENGTH = 10000; // Max characters per text block
 
 // PERFORMANCE: Memoize component to prevent unnecessary re-renders
-export const MessageList = React.memo<MessageListProps>(({ messages, isStreaming, verboseMode }) => {
+export const MessageList = React.memo<MessageListProps>(({ messages, isStreaming, verboseMode, tools }) => {
   // PERFORMANCE: Memoize tool executions map
   const toolExecutions = useMemo(() => {
-    const executions = new Map<string, { name: string; input: any; output: string }>();
+    const executions = new Map<string, { name: string; input: any; output: string | React.ReactNode; data?: any }>();
 
     messages.forEach((msg) => {
-    // Extract tool results from user messages (don't rely on toolUseResult flag)
-    if (msg.type === 'user') {
-      const content = msg.message.content;
-      if (Array.isArray(content)) {
-        content.forEach((block: any) => {
-          if (block.type === 'tool_result') {
-            const output = typeof block.content === 'string' ? block.content : JSON.stringify(block.content);
-            // We'll fill in name and input when we process assistant messages
-            executions.set(block.tool_use_id, {
-              name: '',
-              input: null,
-              output,
-            });
-          }
-        });
+      // Extract tool results from user messages (don't rely on toolUseResult flag)
+      if (msg.type === 'user') {
+        const content = msg.message.content;
+        if (Array.isArray(content)) {
+          content.forEach((block: any) => {
+            if (block.type === 'tool_result') {
+              // Check if block.content is a React element and preserve it
+              let output;
+              if (React.isValidElement(block.content)) {
+                output = block.content;
+              } else {
+                output = typeof block.content === 'string' ? block.content : JSON.stringify(block.content);
+              }
+              // We'll fill in name and input when we process assistant messages
+              executions.set(block.tool_use_id, {
+                name: '',
+                input: null,
+                output,
+                data: msg.toolUseResult?.data, // Store the data for renderToolResultMessage
+              });
+            }
+          });
+        }
       }
-    }
 
-    if (msg.type === 'assistant') {
+      if (msg.type === 'assistant') {
       // Extract tool use blocks and link them with their results
       const toolUseBlocks = extractToolUseBlocks(msg);
       toolUseBlocks.forEach((block: any) => {
@@ -117,6 +126,7 @@ export const MessageList = React.memo<MessageListProps>(({ messages, isStreaming
           verboseMode={verboseMode}
           isLastMessage={index === displayMessages.length - 1}
           toolExecutions={toolExecutions}
+          tools={tools}
         />
       ))}
 
@@ -145,10 +155,11 @@ interface MessageItemProps {
   message: Message;
   verboseMode: boolean;
   isLastMessage: boolean;
-  toolExecutions: Map<string, { name: string; input: any; output: string }>;
+  toolExecutions: Map<string, { name: string; input: any; output: string | React.ReactNode; data?: any }>;
+  tools?: any[];
 }
 
-const MessageItemWithTools: React.FC<MessageItemProps> = ({ message, verboseMode, isLastMessage, toolExecutions }) => {
+const MessageItemWithTools: React.FC<MessageItemProps> = ({ message, verboseMode, isLastMessage, toolExecutions, tools }) => {
   // Render user message
   if (message.type === 'user') {
     const content = typeof message.message.content === 'string'
@@ -187,7 +198,7 @@ const MessageItemWithTools: React.FC<MessageItemProps> = ({ message, verboseMode
     return (
       <Box flexDirection="column" marginBottom={1} marginTop={1}>
         <Box marginBottom={0}>
-          <Text bold color={PURPLE}>◀ 👾 SCOUT</Text>
+          <Text bold color={PURPLE}>◀ ASSISTANT</Text>
         </Box>
 
         {/* Display text content */}
@@ -225,8 +236,10 @@ const MessageItemWithTools: React.FC<MessageItemProps> = ({ message, verboseMode
                   toolName={block.name}
                   toolInput={block.input}
                   toolOutput={execution?.output}
+                  toolData={execution?.data}
                   isComplete={!!execution}
                   verboseMode={verboseMode}
+                  tools={tools}
                 />
               );
             })}
@@ -265,10 +278,12 @@ const compactText = (text: string, maxLines: number): { text: string; truncated:
 const ToolExecution: React.FC<{
   toolName: string;
   toolInput: any;
-  toolOutput?: string | AnsiOutput;
+  toolOutput?: string | AnsiOutput | React.ReactNode;
+  toolData?: any;
   isComplete: boolean;
   verboseMode: boolean;
-}> = ({ toolName, toolInput, toolOutput, isComplete, verboseMode }) => {
+  tools?: any[];
+}> = ({ toolName, toolInput, toolOutput, toolData, isComplete, verboseMode, tools }) => {
   // Format tool display based on tool type
   const formatToolDisplay = () => {
     const toolBaseName = toolName.replace(/^mcp__[^_]+__/, ''); // Remove MCP prefix if present
@@ -309,6 +324,12 @@ const ToolExecution: React.FC<{
     if (!toolOutput) return null;
 
     const toolBaseName = toolName.replace(/^mcp__[^_]+__/, '');
+    
+    // If toolOutput is a React component, we can't summarize it as text
+    if (typeof toolOutput !== 'string' && typeof toolOutput !== 'object') {
+      return null;
+    }
+    
     const outputStr = typeof toolOutput === 'string' ? toolOutput : JSON.stringify(toolOutput);
     const lines = outputStr.split('\n').filter(line => line.trim());
 
@@ -330,8 +351,15 @@ const ToolExecution: React.FC<{
       const file = toolInput.file_path || toolInput.path || 'file';
       return { summary: `Created ${file} (${lines.length} lines)`, totalLines: 0 };
     } else if (toolBaseName === 'Grep' || toolBaseName === 'grep' || toolBaseName === 'search') {
-      const matches = lines.filter(l => l.includes(':')).length;
-      return { summary: `Found ${matches} match${matches !== 1 ? 'es' : ''}`, totalLines: 0 };
+      // Parse the first line which contains "Found X files" or "No files found"
+      const firstLine = lines[0] || '';
+      if (firstLine.startsWith('No files found')) {
+        return { summary: 'Found 0 matches', totalLines: 0 };
+      }
+      // Extract count from "Found X file(s)" format
+      const match = firstLine.match(/Found (\d+)/);
+      const count = match ? parseInt(match[1], 10) : 0;
+      return { summary: `Found ${count} match${count !== 1 ? 'es' : ''}`, totalLines: 0 };
     } else if (toolBaseName === 'Bash' || toolBaseName === 'bash' || toolBaseName === 'exec') {
       // Show first 3 lines of output in compact mode
       const displayLines = lines.slice(0, 3);
@@ -359,6 +387,20 @@ const ToolExecution: React.FC<{
           <Box>
             <Text color={DIM_WHITE}>⎿ </Text>
             {(() => {
+              // Check if we have tool data and the tool has renderToolResultMessage
+              if (toolData && tools) {
+                const tool = tools.find((t: any) => t.name === toolName);
+                if (tool && tool.renderToolResultMessage) {
+                  // Pass verbose mode to the renderer
+                  return tool.renderToolResultMessage(toolData, { verbose: verboseMode });
+                }
+              }
+
+              // Check if toolOutput is a React element (component)
+              if (React.isValidElement(toolOutput)) {
+                return toolOutput;
+              }
+              
               const result = formatOutputSummary();
               if (result) {
                 const { summary, totalLines } = result;

@@ -601,15 +601,20 @@ export const AgentManager: React.FC<AgentManagerProps> = ({ currentAgentId, onSw
 
     // Add MCP tools
     mcpTools.forEach((tool) => {
-      const toolKey = `mcp__${tool.server}__${tool.name}`;
+      const serverName = tool.server || tool.serverName;
+      if (!serverName) {
+        console.warn(`MCP tool ${tool.name} missing server name, skipping`);
+        return;
+      }
+      const toolKey = `mcp__${serverName}__${tool.name}`;
       const isEnabled = agent.tools[toolKey] !== false;
       toolsListItems.push({
         id: toolKey,
         label: tool.name,
-        description: tool.description || `From ${tool.server}`,
+        description: tool.description || `From ${serverName}`,
         status: isEnabled ? 'active' : 'inactive',
         statusText: isEnabled ? '☑ Enabled' : '☐ Disabled',
-        badge: tool.server.toUpperCase(),
+        badge: serverName.toUpperCase(),
       });
     });
 

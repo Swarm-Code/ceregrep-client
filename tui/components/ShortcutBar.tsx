@@ -28,6 +28,7 @@ const SHORTCUTS: Shortcut[] = [
   { key: 'L', label: 'List' },
   { key: 'A', label: 'Agent' },
   { key: 'T', label: 'MCP' },
+  { key: 'D', label: 'Todos', condition: (view) => view === 'chat' },
   { key: 'R', label: 'Search', condition: (view) => view === 'chat' },
   { key: 'O', label: 'Verbose', condition: (view) => view === 'chat' },
   { key: 'B', label: 'Branch', condition: (view) => view === 'chat' },

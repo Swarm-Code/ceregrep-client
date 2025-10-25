@@ -6,15 +6,35 @@
 import chalk from 'chalk';
 import ora, { Ora } from 'ora';
 import { Message } from '../core/messages.js';
+import { countTokens } from '../core/tokens.js';
+import { getEncoding } from 'js-tiktoken';
 
 export class StreamRenderer {
   private spinner: Ora | null = null;
+  private ghostSpinner: Ora | null = null; // Separate spinner for ghost commands
   private currentToolCount = 0;
   private verbose: boolean;
   private accumulatedMessages: Message[] = [];
+  private lastAssistantMessage: any = null; // Track last assistant message for token info
+  private enc = getEncoding('cl100k_base'); // Use tiktoken for accurate counting (cl100k_base for GPT-3.5-turbo/4)
+  private toolNameMap: Map<string, string> = new Map(); // Map tool_use_id to tool name
 
   constructor(verbose: boolean = false) {
     this.verbose = verbose;
+  }
+
+  /**
+   * Count tokens in text using tiktoken
+   */
+  private countOutputTokens(text: string): number {
+    try {
+      const tokens = this.enc.encode(text);
+      return tokens.length;
+    } catch (error) {
+      console.error('[TOKEN COUNTER] Error counting tokens:', error);
+      // Fallback to character estimate if tiktoken fails
+      return Math.ceil(text.length / 4);
+    }
   }
 
   /**
@@ -38,7 +58,6 @@ export class StreamRenderer {
    */
   showPrompt(prompt: string) {
     console.log(chalk.bold.blueBright('Prompt:'), chalk.white(prompt));
-    console.log(); // Single line break after prompt
   }
 
   /**
@@ -50,15 +69,15 @@ export class StreamRenderer {
 
     // Show ghost commands in non-verbose mode, full details in verbose
     if (message.type === 'assistant') {
+      this.lastAssistantMessage = message; // Track for token info
       if (this.verbose) {
         this.handleAssistantMessage(message);
       } else {
         this.showGhostCommands(message);
       }
     } else if (message.type === 'user') {
-      if (this.verbose) {
-        this.handleToolResult(message);
-      }
+      // Always show tool results with token counts and output
+      this.handleToolResult(message);
     }
   }
 
@@ -76,11 +95,11 @@ export class StreamRenderer {
     const toolUseBlocks = content.filter((c: any) => c.type === 'tool_use');
     const textBlocks = content.filter((c: any) => c.type === 'text');
 
-    // If there's text content but no tools, clear the line if we had shown tools
+    // If there's text content but no tools, stop ghost spinner
     if (textBlocks.length > 0 && toolUseBlocks.length === 0) {
-      if (this.currentToolCount > 0) {
-        // Clear the line
-        process.stdout.write('\r' + ' '.repeat(process.stdout.columns || 80) + '\r');
+      if (this.ghostSpinner) {
+        this.ghostSpinner.stop();
+        this.ghostSpinner = null;
         this.currentToolCount = 0;
       }
       // Don't display text here - let the final response handler do it
@@ -89,6 +108,15 @@ export class StreamRenderer {
 
     if (toolUseBlocks.length > 0) {
       this.currentToolCount = toolUseBlocks.length;
+
+      // Store tool names for later display with results
+      for (const toolBlock of toolUseBlocks) {
+        const toolId = (toolBlock as any).id;
+        const toolName = (toolBlock as any).name;
+        if (toolId) {
+          this.toolNameMap.set(toolId, toolName);
+        }
+      }
 
       // Create tool execution display
       const toolNames = toolUseBlocks.map((t: any) => {
@@ -100,20 +128,27 @@ export class StreamRenderer {
           const cmd = input.command.length > 40
             ? input.command.substring(0, 40) + '...'
             : input.command;
-          return chalk.gray(`${cmd}`);
+          return `${cmd}`;
         } else if (toolName === 'Grep' && input.pattern) {
           const pattern = input.pattern.length > 30
             ? input.pattern.substring(0, 30) + '...'
             : input.pattern;
-          return chalk.gray(`grep "${pattern}"`);
+          return `grep "${pattern}"`;
         } else {
-          return chalk.gray(toolName.toLowerCase());
+          return toolName.toLowerCase();
         }
-      }).join(chalk.gray(' → '));
+      }).join(' → ');
 
-      // Write tool execution on same line
-      const toolLine = chalk.gray('⚡ ') + toolNames;
-      process.stdout.write('\r' + toolLine);
+      // Use spinner instead of overwriting stdout
+      if (this.ghostSpinner) {
+        this.ghostSpinner.text = chalk.gray(toolNames);
+      } else {
+        this.ghostSpinner = ora({
+          text: chalk.gray(toolNames),
+          color: 'cyan',
+          spinner: 'dots'
+        }).start();
+      }
     }
   }
 
@@ -142,7 +177,6 @@ export class StreamRenderer {
       const text = (textBlock as any).text;
       if (text && text.trim()) {
         console.log(chalk.white(text.trim()));
-        console.log(); // Blank line
       }
     }
 
@@ -151,8 +185,14 @@ export class StreamRenderer {
       this.currentToolCount = toolUseBlocks.length;
 
       for (const toolBlock of toolUseBlocks) {
+        const toolId = (toolBlock as any).id;
         const toolName = (toolBlock as any).name;
         const toolInput = (toolBlock as any).input;
+
+        // Store tool name for later display with results
+        if (toolId) {
+          this.toolNameMap.set(toolId, toolName);
+        }
 
         // Format tool input for display
         const inputPreview = this.formatToolInput(toolName, toolInput);
@@ -174,8 +214,103 @@ export class StreamRenderer {
 
   /**
    * Handle tool result (user message with tool_result)
+   * Displays cumulative token counts, output, and truncation info
    */
   private handleToolResult(message: Message) {
+    if (message.type !== 'user') return;
+
+    const userMsg = message as any;
+    const content = Array.isArray(userMsg.message.content) ? userMsg.message.content : [userMsg.message.content];
+    const toolResults = content.filter((c: any) => c.type === 'tool_result');
+
+    if (toolResults.length === 0) return;
+
+    // Calculate cumulative tokens from all accumulated messages
+    const cumulativeTokens = countTokens(this.accumulatedMessages);
+    const contextThreshold = 170000; // 85% of 200k context
+    const percentUsed = Math.round((cumulativeTokens / 200000) * 100);
+
+    for (const result of toolResults) {
+      const toolUseId = (result as any).tool_use_id;
+      const content = (result as any).content;
+      const isError = (result as any).is_error;
+
+      // Stop spinner if active
+      if (this.spinner) {
+        this.spinner.stop();
+        this.spinner = null;
+      }
+
+      // Display tool result with formatting
+      const statusIcon = isError ? chalk.red('✗') : chalk.green('✓');
+      const statusText = isError ? chalk.red('ERROR') : chalk.green('OK');
+
+      // Get tool name from stored map
+      const toolName = this.toolNameMap.get(toolUseId) || 'Unknown';
+
+      // Build token display with context warning
+      let tokenDisplay = `[${cumulativeTokens.toLocaleString()} tokens, ${percentUsed}%]`;
+      if (cumulativeTokens >= contextThreshold) {
+        tokenDisplay = chalk.yellow(tokenDisplay + ' ⚠️ NEAR LIMIT');
+      }
+
+      console.log(
+        chalk.dim('└─ ') + statusIcon + ' ' +
+        chalk.cyan(`${toolName}`) + ' ' +
+        statusText + ' ' +
+        chalk.dim(tokenDisplay)
+      );
+
+      // Display output with tiktoken-based truncation
+      const outputStr = typeof content === 'string' ? content : JSON.stringify(content);
+
+      // Count actual tokens using tiktoken
+      const totalTokens = this.countOutputTokens(outputStr);
+      const maxTokens = 200; // Max tokens to display in output preview
+
+      // For errors (especially scout_query), show full output without truncation
+      const isScoutQueryError = isError && toolName === 'scout_query';
+      let displayOutput = outputStr;
+      let isTruncated = false;
+
+      if (!isError) {
+        // Only truncate non-error outputs
+        isTruncated = totalTokens > maxTokens;
+        if (isTruncated) {
+          // Find approximate position where we have ~maxTokens
+          let cutoff = Math.floor((maxTokens / totalTokens) * outputStr.length);
+          displayOutput = outputStr.substring(0, cutoff) + '...';
+        }
+      }
+
+      if (displayOutput.trim()) {
+        if (isScoutQueryError) {
+          // For scout_query errors, show full output with special formatting
+          console.log(chalk.red('╔════════════════════════════════════════════════════════════════╗'));
+          console.log(chalk.red('║') + ' ' + chalk.bold('Scout Query Error Details'));
+          console.log(chalk.red('╚════════════════════════════════════════════════════════════════╝'));
+          console.log(chalk.gray(displayOutput));
+          console.log('');
+        } else {
+          // Show first line or shortened version for compact display
+          const lines = displayOutput.trim().split('\n');
+          const firstLine = lines[0];
+
+          if (lines.length > 1) {
+            // For multi-line output, show preview
+            console.log(chalk.dim('   └─ ') + chalk.gray(firstLine));
+            console.log(chalk.dim(`   └─ [${lines.length} lines, ${totalTokens} tokens${isTruncated ? `, showing ~${maxTokens}` : ''}]`));
+          } else {
+            // For single line, show full content
+            console.log(chalk.dim('   └─ ') + chalk.gray(displayOutput.trim()));
+            if (isTruncated) {
+              console.log(chalk.dim(`   └─ [Output truncated: ${totalTokens} tokens total, showing ~${maxTokens}]`));
+            }
+          }
+        }
+      }
+    }
+
     if (this.currentToolCount > 0) {
       this.currentToolCount--;
     }
@@ -189,7 +324,7 @@ export class StreamRenderer {
       }
     } else {
       if (this.spinner) {
-        this.spinner.succeed(chalk.green('Tool execution complete'));
+        this.spinner.stop();
         this.spinner = null;
       }
 
@@ -202,26 +337,51 @@ export class StreamRenderer {
   }
 
   /**
-   * Format tool input for compact display
+   * Format tool input for compact display (token-aware)
    */
   private formatToolInput(toolName: string, input: any): string {
+    const maxTokens = 50; // Max tokens in tool input preview
+
     switch (toolName) {
-      case 'bash':
-        return input.command ? `\`${input.command.substring(0, 60)}${input.command.length > 60 ? '...' : ''}\`` : '';
+      case 'bash': {
+        if (!input.command) return '';
+        const cmd = input.command;
+        const cmdTokens = this.countOutputTokens(cmd);
+        if (cmdTokens > maxTokens) {
+          // Truncate to approximately maxTokens
+          const cutoff = Math.floor((maxTokens / cmdTokens) * cmd.length);
+          return `\`${cmd.substring(0, cutoff)}...\``;
+        }
+        return `\`${cmd}\``;
+      }
 
-      case 'grep':
-        return input.pattern ? `pattern: "${input.pattern}"` : '';
+      case 'grep': {
+        if (!input.pattern) return '';
+        const pattern = input.pattern;
+        const patternTokens = this.countOutputTokens(pattern);
+        if (patternTokens > maxTokens) {
+          const cutoff = Math.floor((maxTokens / patternTokens) * pattern.length);
+          return `pattern: "${pattern.substring(0, cutoff)}..."`;
+        }
+        return `pattern: "${pattern}"`;
+      }
 
-      default:
+      default: {
         // Generic display
         const keys = Object.keys(input);
         if (keys.length === 0) return '';
         if (keys.length === 1) {
           const value = input[keys[0]];
           const strValue = typeof value === 'string' ? value : JSON.stringify(value);
-          return `${keys[0]}: ${strValue.substring(0, 40)}${strValue.length > 40 ? '...' : ''}`;
+          const strTokens = this.countOutputTokens(strValue);
+          if (strTokens > maxTokens) {
+            const cutoff = Math.floor((maxTokens / strTokens) * strValue.length);
+            return `${keys[0]}: ${strValue.substring(0, cutoff)}...`;
+          }
+          return `${keys[0]}: ${strValue}`;
         }
         return `${keys.length} params`;
+      }
     }
   }
 
@@ -290,11 +450,8 @@ export class StreamRenderer {
     if (!this.verbose) {
       console.log(response);
     } else {
-      console.log();
       console.log(chalk.bold.greenBright('Response:'));
-      console.log();
       console.log(chalk.white(response));
-      console.log();
     }
   }
 
@@ -323,7 +480,7 @@ export class StreamRenderer {
     const cachedPercent = stats.total > 0 ? ((stats.cached / stats.total) * 100).toFixed(1) : '0.0';
 
     console.log(
-      chalk.dim('\nℹ Token Usage: ') +
+      chalk.dim('ℹ Token Usage: ') +
       chalk.white(`${stats.total.toLocaleString()} total `) +
       chalk.dim('(') +
       chalk.cyan(`${stats.input.toLocaleString()} in`) +

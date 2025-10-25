@@ -25,10 +25,24 @@ debug-*.log
 test-*.ts
 test-*.sh
 test-*.js
+*-test.ts
+*.bak
+t/
+
+# Reports and outputs
+reports/
+testing/
+
+# Documentation that shouldn't be committed
+DEAD_CODE_*.md
+OAUTH_IMPLEMENTATION.md
 
 # External repositories cloned for reference
 llxprt-code/
 llxprt*/
+
+# Kode folder
+Kode/
 
 # Python
 __pycache__/
