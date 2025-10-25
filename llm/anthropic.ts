@@ -98,6 +98,22 @@ export async function querySonnet(
     content: msg.message.content,
   })) as Anthropic.MessageParam[];
 
+  // Validate that all messages have valid content
+  // The Anthropic API requires non-empty content
+  for (let i = 0; i < apiMessages.length; i++) {
+    const msg = apiMessages[i];
+    const content = msg.content;
+
+    if (!content ||
+        (Array.isArray(content) && content.length === 0) ||
+        (typeof content === 'string' && content.trim().length === 0)) {
+      throw new Error(
+        `Invalid message at index ${i}: content is required and must be non-empty. ` +
+        `Role: ${msg.role}, Content: ${JSON.stringify(content)}`
+      );
+    }
+  }
+
   // Format tools
   const apiTools = formatToolsForAPI(tools);
 

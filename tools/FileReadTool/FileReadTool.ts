@@ -298,11 +298,14 @@ export const FileReadTool = {
     if (!existsSync(fullFilePath)) {
       // Try to find a similar file with a different extension
       const similarFilename = findSimilarFile(fullFilePath);
-      let message = 'File does not exist.';
+      let message = `File does not exist: ${fullFilePath}`;
 
       // If we found a similar file, suggest it to the assistant
       if (similarFilename) {
         message += ` Did you mean ${similarFilename}?`;
+      } else {
+        // Suggest using discovery tools first
+        message += '\n\nSuggestion: Use the LS or Glob tools first to discover what files actually exist before trying to read them. For example:\n- Use LS to explore the directory structure\n- Use Glob with patterns like "**/*.md" or "**/*.ts" to find specific file types';
       }
 
       return {
