@@ -3,10 +3,11 @@
 import asyncio
 import subprocess
 import json
+import os
 from pathlib import Path
 from .base_tool import BaseTool
 from mcp.types import TextContent
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 
 
 class CeregrepQueryTool(BaseTool):
@@ -15,6 +16,17 @@ class CeregrepQueryTool(BaseTool):
     def __init__(self, ceregrep_bin_path: str = None):
         """Initialize the tool with path to ceregrep binary."""
         self.ceregrep_bin = ceregrep_bin_path or "scout"
+        default_dir = os.environ.get("SCOUT_DEFAULT_PROJECT_DIR")
+        self.default_cwd: Optional[Path] = None
+
+        if default_dir:
+            try:
+                resolved = Path(default_dir).expanduser().resolve()
+                if resolved.exists():
+                    self.default_cwd = resolved
+            except Exception:
+                # Ignore invalid defaults; fall back to runtime cwd handling.
+                self.default_cwd = None
 
     @property
     def name(self) -> str:
@@ -62,13 +74,34 @@ class CeregrepQueryTool(BaseTool):
     async def execute(self, arguments: Dict[str, Any]) -> List[TextContent]:
         """Execute ceregrep query."""
         query = arguments.get("query", "")
-        cwd = arguments.get("cwd", ".")
+        cwd_arg = arguments.get("cwd")
+        effective_cwd = None
+
+        if cwd_arg:
+            candidate = Path(str(cwd_arg)).expanduser()
+            if not candidate.is_absolute():
+                base = self.default_cwd or Path.cwd()
+                candidate = (base / candidate).resolve()
+            else:
+                candidate = candidate.resolve()
+            effective_cwd = candidate
+        elif self.default_cwd:
+            effective_cwd = self.default_cwd
+        else:
+            effective_cwd = Path.cwd()
+
         model = arguments.get("model")
         verbose = arguments.get("verbose", False)
         timeout = arguments.get("timeout", 300)  # Default 5 minutes for complex queries
 
         if not query:
             return [TextContent(type="text", text="Error: query parameter is required")]
+
+        if not effective_cwd.exists():
+            return [TextContent(
+                type="text",
+                text=f"Error: working directory does not exist: {effective_cwd}"
+            )]
 
         # Build command
         cmd = [self.ceregrep_bin, "query", query]
@@ -85,7 +118,7 @@ class CeregrepQueryTool(BaseTool):
                 *cmd,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
-                cwd=cwd
+                cwd=str(effective_cwd)
             )
 
             try:
