@@ -1,22 +1,39 @@
 /**
  * Tool registry for Ceregrep Agent Framework
- * Exports all available tools and tool loading functions
+ * Exports converted Kode tools
  */
 
 import { Tool } from '../core/tool.js';
-import { BashTool } from './bash.js';
-import { GrepTool } from './grep.js';
+import { BashTool } from './BashTool/BashTool.js';
+import { GrepTool } from './GrepTool/GrepTool.js';
+import { FileReadTool } from './FileReadTool/FileReadTool.js';
+import { GlobTool } from './GlobTool/GlobTool.js';
+import { LSTool } from './lsTool/lsTool.js';
+import { TodoWriteTool } from './TodoWriteTool/TodoWriteTool.js';
+import { TodoReadTool } from './TodoReadTool/TodoReadTool.js';
+import { FileEditTool } from './FileEditTool/FileEditTool.js';
+import { FileWriteTool } from './FileWriteTool/FileWriteTool.js';
+import { isToolEnabled } from '../utils/permissions.js';
 
 // Cache for memoized tool loading
 let cachedTools: Tool[] | null = null;
-let cachedMCPTools: Tool[] | null = null;
 
 /**
- * Get all built-in tools (Bash, Grep)
+ * Get all built-in tools
  * Does NOT include MCP tools
  */
 export function getAllTools(): Tool[] {
-  return [BashTool, GrepTool];
+  return [
+    BashTool as unknown as Tool,
+    GrepTool as unknown as Tool,
+    FileReadTool as unknown as Tool,
+    FileEditTool as unknown as Tool,
+    FileWriteTool as unknown as Tool,
+    GlobTool as unknown as Tool,
+    LSTool as unknown as Tool,
+    TodoWriteTool as unknown as Tool,
+    TodoReadTool as unknown as Tool,
+  ];
 }
 
 /**
@@ -126,7 +143,10 @@ export async function getTools(includeMCP: boolean = true, includeAgents: boolea
     }),
   );
 
-  const enabledTools = tools.filter((_, i) => enabledFlags[i]);
+  let enabledTools = tools.filter((_, i) => enabledFlags[i]);
+
+  // Filter by permissions (disabled tools in config)
+  enabledTools = enabledTools.filter((tool) => isToolEnabled(tool.name));
 
   // Cache the enabled tools for future calls
   cachedTools = enabledTools;
@@ -139,8 +159,17 @@ export async function getTools(includeMCP: boolean = true, includeAgents: boolea
  */
 export function clearToolCache(): void {
   cachedTools = null;
-  cachedMCPTools = null;
 }
 
 // Re-export individual tools
-export { BashTool, GrepTool };
+export {
+  BashTool,
+  GrepTool,
+  FileReadTool,
+  FileEditTool,
+  FileWriteTool,
+  GlobTool,
+  LSTool,
+  TodoWriteTool,
+  TodoReadTool,
+};

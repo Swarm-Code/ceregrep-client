@@ -5,7 +5,7 @@
 
 // Core
 export { Tool, ToolContext, ValidationResult, ToolResult, ToolUse } from './core/tool.js';
-export { query, compact } from './core/agent.js';
+export { query } from './core/agent.js';
 export {
   Message,
   UserMessage,
@@ -17,6 +17,9 @@ export {
   extractToolUseBlocks,
   extractTextContent,
 } from './core/messages.js';
+
+// Utils - Auto Compaction
+export { checkAutoCompact, getCompactStats, logCompactMetrics, resetCompactHistory } from './utils/autoCompactCore.js';
 
 // Tools
 export { BashTool, GrepTool, getAllTools, getTools } from './tools/index.js';

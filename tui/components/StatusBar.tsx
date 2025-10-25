@@ -77,6 +77,16 @@ export const StatusBar: React.FC<StatusBarProps> = ({
     return baseMode;
   };
 
+  // Extract model tier (opus, sonnet, haiku) from model name
+  const getModelTier = (modelName: string): string => {
+    const lower = modelName.toLowerCase();
+    if (lower.includes('opus')) return 'opus';
+    if (lower.includes('sonnet')) return 'sonnet';
+    if (lower.includes('haiku')) return 'haiku';
+    // Fallback to last segment for unknown models
+    return modelName.split('-').pop() || modelName;
+  };
+
   return (
     <Box flexDirection="column">
       {/* Minimal single row status - no lines */}
@@ -122,7 +132,7 @@ export const StatusBar: React.FC<StatusBarProps> = ({
                 </>
               )}
               {model && (
-                <Text color={DIM_WHITE}>{model.split('-').pop()}</Text>
+                <Text color={DIM_WHITE}>{getModelTier(model)}</Text>
               )}
               {provider && (
                 <>

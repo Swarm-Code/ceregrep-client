@@ -73,8 +73,16 @@ export const ConfigSchema = z.object({
   // Anthropic API key (for backward compatibility)
   apiKey: z.string().optional(),
 
+  // OAuth configuration
+  oauth: z.object({
+    enabledProviders: z.record(z.boolean()).optional(), // Map of provider -> enabled state
+  }).optional(),
+
   // MCP servers
   mcpServers: z.record(MCPServerConfigSchema).optional(),
+
+  // Disabled tools (tool permissions)
+  disabledTools: z.array(z.string()).optional().default([]),
 
   // Hooks configuration
   hooks: HooksSchema,
@@ -88,9 +96,22 @@ export const ConfigSchema = z.object({
   verbose: z.boolean().optional().default(false),
   debug: z.boolean().optional().default(false),
 
-  // Context compaction settings
-  compactionThreshold: z.number().optional().default(100000), // 100k tokens (75% of 131k context)
-  compactionKeepRecentCount: z.number().optional().default(10), // Keep last 10 messages
+  // Auto-compaction settings (based on Kode's implementation)
+  autoCompact: z.object({
+    enabled: z.boolean().optional().default(true), // Enable auto-compaction
+    thresholdRatio: z.number().min(0.5).max(0.99).optional().default(0.92), // 92% of context limit
+    contextLength: z.number().optional().default(200000), // Default model context length
+    keepRecentCount: z.number().optional().default(10), // Keep last N messages after compaction
+  }).optional().default({
+    enabled: true,
+    thresholdRatio: 0.92,
+    contextLength: 200000,
+    keepRecentCount: 10,
+  }),
+
+  // Legacy compaction settings (deprecated - use autoCompact instead)
+  compactionThreshold: z.number().optional().default(100000),
+  compactionKeepRecentCount: z.number().optional().default(10)
 });
 
 export type Config = z.infer<typeof ConfigSchema>;

@@ -11,12 +11,13 @@
 
 import { Tool } from '../../core/tool.js';
 import { Message, createUserMessage } from '../../core/messages.js';
-import { query as agentQuery, compact as agentCompact } from '../../core/agent.js';
+import { query as agentQuery } from '../../core/agent.js';
 import { ContentBlockParam } from '@anthropic-ai/sdk/resources/index.mjs';
 import { getTools } from '../../tools/index.js';
 import { getConfig } from '../../config/loader.js';
 import { querySonnet, formatSystemPromptWithContext } from '../../llm/router.js';
 import { shouldCompact, countTokens, getTokenStats } from '../../core/tokens.js';
+import { checkAutoCompact } from '../../utils/autoCompactCore.js';
 
 export interface QueryOptions {
   model?: string;
@@ -45,12 +46,20 @@ export interface StreamQueryResult {
  * Matches Claude Code's architecture where the SDK doesn't maintain state
  */
 export class ScoutClient {
-  private config = getConfig();
+  private config: any;
   private tools: Tool[] = [];
   private model: string;
   private initialized: boolean = false;
+  private configOverrides: any;
 
-  constructor(options: QueryOptions = {}) {
+  constructor(options: QueryOptions & { disabledTools?: string[] } = {}) {
+    const baseConfig = getConfig();
+    // Merge config overrides
+    this.configOverrides = options;
+    this.config = {
+      ...baseConfig,
+      ...options,
+    };
     this.model = options.model || this.config.model || 'claude-sonnet-4-20250514';
   }
 
@@ -109,6 +118,13 @@ export class ScoutClient {
       '- When referencing code, ALWAYS include the file path and line number where it can be found.',
       '- Provide thorough explanations of how things work, why they work that way, and what each piece does.',
       '- Word for word: "Better to add too much context than necessary" - follow this principle strictly.',
+      '',
+      'IMPORTANT - FILE DISCOVERY WORKFLOW:',
+      '- ALWAYS use LS or Glob tools FIRST to discover what files actually exist before trying to read them',
+      '- Do NOT assume standard project structures (like src/index.ts or ../README.md) exist',
+      '- Use LS to see directory structure, then Glob to find specific file patterns',
+      '- Only use Read tool AFTER you have confirmed the file exists via LS or Glob',
+      '- If a Read fails with ENOENT, use Glob to search for similar files instead of guessing paths',
       '',
       'IMPORTANT - USE TOOLS WHEN NEEDED:',
       '- Use grep or bash tools to search for specific information when asked about code.',
@@ -214,6 +230,13 @@ export class ScoutClient {
       '- When referencing code, ALWAYS include the file path and line number where it can be found.',
       '- Provide thorough explanations of how things work, why they work that way, and what each piece does.',
       '- Word for word: "Better to add too much context than necessary" - follow this principle strictly.',
+      '',
+      'IMPORTANT - FILE DISCOVERY WORKFLOW:',
+      '- ALWAYS use LS or Glob tools FIRST to discover what files actually exist before trying to read them',
+      '- Do NOT assume standard project structures (like src/index.ts or ../README.md) exist',
+      '- Use LS to see directory structure, then Glob to find specific file patterns',
+      '- Only use Read tool AFTER you have confirmed the file exists via LS or Glob',
+      '- If a Read fails with ENOENT, use Glob to search for similar files instead of guessing paths',
       '',
       'IMPORTANT - USE TOOLS WHEN NEEDED:',
       '- Use grep or bash tools to search for specific information when asked about code.',

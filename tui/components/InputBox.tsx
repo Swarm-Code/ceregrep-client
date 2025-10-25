@@ -25,6 +25,8 @@ interface InputBoxProps {
 const COMMANDS = [
   { name: '/new', description: 'Create new conversation', usage: '/new [title]' },
   { name: '/agent', description: 'Switch agent', usage: '/agent [id]' },
+  { name: '/model', description: 'Select AI provider', usage: '/model' },
+  { name: '/permissions', description: 'Enable/disable tools', usage: '/permissions' },
   { name: '/checkpoint', description: 'Create checkpoint', usage: '/checkpoint [description]' },
   { name: '/restore', description: 'Restore to checkpoint', usage: '/restore <checkpoint-id>' },
   { name: '/list', description: 'Show conversations', usage: '/list' },
@@ -157,7 +159,7 @@ export const InputBox: React.FC<InputBoxProps> = React.memo(({
     setIsLoadingFiles(true);
     debounceTimerRef.current = setTimeout(async () => {
       try {
-        const files = await searchRepoFiles(atMentionPattern);
+        const files = await searchRepoFiles(atMentionPattern, process.cwd());
         setFileSuggestions(files);
       } catch (error) {
         console.error('Failed to search files:', error);

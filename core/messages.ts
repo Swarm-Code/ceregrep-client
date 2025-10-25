@@ -46,6 +46,14 @@ export type UserMessage = {
   timestamp?: number; // Message creation timestamp
   toolUseResult?: FullToolUseResult;
   displayContent?: string | ContentBlockParam[];
+  // Kodes enhancement: Additional context for specialized use cases
+  options?: {
+    isKodingRequest?: boolean;
+    kodingContext?: string;
+    isCustomCommand?: boolean;
+    commandName?: string;
+    commandArgs?: string;
+  };
 };
 
 export type AssistantMessage = {
@@ -84,6 +92,7 @@ function baseCreateAssistantMessage(
     costUSD: 0,
     durationMs: 0,
     uuid: randomUUID(),
+    timestamp: Date.now(),
     message: {
       id: randomUUID(),
       model: '<synthetic>',
@@ -133,6 +142,7 @@ export function createUserMessage(
   content: string | ContentBlockParam[],
   toolUseResult?: FullToolUseResult,
   displayContent?: string | ContentBlockParam[],
+  options?: UserMessage['options'],
 ): UserMessage {
   return {
     type: 'user',
@@ -141,8 +151,10 @@ export function createUserMessage(
       content,
     },
     uuid: randomUUID(),
+    timestamp: Date.now(),
     toolUseResult,
     displayContent,
+    options,
   };
 }
 
@@ -251,4 +263,53 @@ export function extractTextContent(message: AssistantMessage): string {
     .filter(c => c.type === 'text')
     .map(c => (c as any).text)
     .join(' ');
+}
+
+/**
+ * Get message summary for debugging
+ * Extracts key information about a message for logging/debugging
+ */
+export function getMessageSummary(message: Message): {
+  type: string;
+  length: number;
+  toolUseCount?: number;
+  hasError?: boolean;
+  timestamp?: number;
+} {
+  const base = {
+    type: message.type,
+    timestamp: 'timestamp' in message ? message.timestamp : undefined,
+  };
+
+  if (message.type === 'user') {
+    const content = (message as UserMessage).message.content;
+    const length = typeof content === 'string' ? content.length : JSON.stringify(content).length;
+    return { ...base, length };
+  }
+
+  if (message.type === 'assistant') {
+    const msg = (message as AssistantMessage);
+    const content = msg.message.content;
+    const length = JSON.stringify(content).length;
+    const toolUseCount = content.filter(c => c.type === 'tool_use').length;
+    const hasError = msg.isApiErrorMessage;
+    return { ...base, length, toolUseCount, hasError };
+  }
+
+  if (message.type === 'progress') {
+    const length = JSON.stringify((message as ProgressMessage).content).length;
+    return { ...base, length };
+  }
+
+  return { ...base, length: 0 };
+}
+
+/**
+ * Filter messages by type
+ */
+export function filterMessagesByType<T extends Message['type']>(
+  messages: Message[],
+  type: T,
+): Extract<Message, { type: T }>[] {
+  return messages.filter(m => m.type === type) as Extract<Message, { type: T }>[];
 }

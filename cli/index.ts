@@ -8,7 +8,7 @@ import { Command } from 'commander';
 import { createRequire } from 'module';
 import { CeregrepClient } from '../sdk/typescript/index.js';
 import { getTools } from '../tools/index.js';
-import { getConfig, getCurrentProjectConfig, saveCurrentProjectConfig } from '../config/loader.js';
+import { getConfig, getCurrentProjectConfig, saveCurrentProjectConfig, getConfigSources } from '../config/loader.js';
 
 const require = createRequire(import.meta.url);
 const { version } = require('../../package.json');
@@ -84,11 +84,11 @@ program
         console.log('🔍 Debug mode enabled - verbose output will be shown\n');
       }
 
-      const configOverrides: any = {
-        model: options.model,
-        verbose: options.verbose,
-        debug: options.debug,
-      };
+      // Only include overrides that are actually set (not undefined)
+      const configOverrides: any = {};
+      if (options.model) configOverrides.model = options.model;
+      if (options.verbose) configOverrides.verbose = options.verbose;
+      if (options.debug) configOverrides.debug = options.debug;
 
       // Add thinking mode settings if specified
       if (options.thinking) {
@@ -110,6 +110,15 @@ program
         configOverrides.maxThinkingTokens = parseInt(options.maxThinkingTokens, 10);
       }
 
+      // Load tools and filter out write-capable tools (read-only mode for CLI query)
+      const allTools = await getTools(true);
+      const readOnlyTools = allTools.filter(tool => {
+        const toolName = tool.name;
+        // Block write-capable tools in CLI query mode
+        const blockedTools = ['Edit', 'Write', 'Bash', 'FileEditTool', 'FileWriteTool', 'BashTool', 'TodoWrite', 'TodoWriteTool'];
+        return !blockedTools.includes(toolName);
+      });
+
       const client = new CeregrepClient(configOverrides);
 
       // Show prompt header
@@ -122,12 +131,14 @@ program
 
       // Stream messages in real-time
       // Pass empty message history since CLI is single-query
+      // Use read-only tools to prevent file modifications
       for await (const message of client.queryStream([], prompt, {
         verbose: options.verbose,
         debug: options.debug,
         enableThinking: configOverrides.enableThinking,
         ultrathinkMode: configOverrides.ultrathinkMode,
         maxThinkingTokens: configOverrides.maxThinkingTokens,
+        tools: readOnlyTools,
       })) {
         renderer.handleMessage(message);
         allMessages.push(message);
@@ -185,9 +196,25 @@ program
   .action(async () => {
     try {
       const config = getConfig();
+      const sources = getConfigSources();
+
       console.log('╔════════════════════════════════════════╗');
       console.log('║     Scout Configuration           ║');
       console.log('╚════════════════════════════════════════╝\n');
+
+      // Config sources
+      console.log('📍 Configuration Sources:');
+      if (sources.global) {
+        console.log(`  Global: ${sources.global}`);
+      } else {
+        console.log('  Global: None');
+      }
+      if (sources.project) {
+        console.log(`  Project: ${sources.project}`);
+      } else {
+        console.log('  Project: None');
+      }
+      console.log();
 
       // Core configuration
       console.log('🔧 Core Configuration:');

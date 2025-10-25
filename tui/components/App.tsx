@@ -12,11 +12,15 @@ import { Header } from './Header.js';
 import { ConversationList } from './ConversationList.js';
 import { ConfigPanel, ConfigData } from './ConfigPanel.js';
 import { MCPManager } from './MCPManager.js';
+import { ModelManager } from './ModelManager.js';
 import { AgentManager } from './AgentManager.js';
 import { MessageNavigator } from './MessageNavigator.js';
 import { BranchSelector } from './BranchSelector.js';
 import { ShortcutBar } from './ShortcutBar.js';
 import { TooltipHints } from './TooltipHints.js';
+import { TodoManager } from './TodoManager.js';
+import { PermissionsManager } from './PermissionsManager.js';
+import { OAuthCodeDialog } from './OAuthCodeDialog.js';
 import { CeregrepClient } from '../../sdk/typescript/index.js';
 import { Message, createUserMessage, AssistantMessage } from '../../core/messages.js';
 import { getConfig, saveConfig } from '../../config/loader.js';
@@ -43,8 +47,9 @@ import { getTokenStats } from '../../core/tokens.js';
 import { getModeSystemPrompt } from '../mode-prompts.js';
 import { getBackgroundAgent } from '../background-agent.js';
 import { loadHistory, savePrompt, PromptHistoryEntry } from '../prompt-history.js';
+import { filterToolsByMode, getModeToolDescription } from '../../utils/mode-tools.js';
 
-type View = 'chat' | 'conversations' | 'agents' | 'config' | 'mcp' | 'branches';
+type View = 'chat' | 'conversations' | 'agents' | 'config' | 'mcp' | 'models' | 'branches' | 'todos' | 'permissions';
 type AgentMode = 'PLAN' | 'ACT' | 'DEBUG';
 
 interface AppProps {
@@ -58,6 +63,7 @@ const BLUE = '#4169E1';
 const PURPLE = '#A855F7';
 const CYAN = '#22D3EE';
 const WHITE = '#FFFFFF';
+const DIM_WHITE = '#9CA3AF';
 const RED = '#EF4444';
 const GREEN = '#10B981';
 const YELLOW = '#F59E0B';
@@ -71,9 +77,11 @@ export const App: React.FC<AppProps> = ({ initialConversationId, initialAgentId,
   );
   const [isStreaming, setIsStreaming] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [errorDetails, setErrorDetails] = useState<any>(null); // For 400 error debugging
   const [agentId, setAgentId] = useState<string | undefined>(initialAgentId);
   const [showHelp, setShowHelp] = useState(false);
   const [client, setClient] = useState<CeregrepClient | null>(null);
+  const [tools, setTools] = useState<any[]>([]);
   const [verboseMode, setVerboseMode] = useState(false);
   const [agentMode, setAgentMode] = useState<AgentMode>('PLAN');
   const [autoMode, setAutoMode] = useState(false);
@@ -84,11 +92,17 @@ export const App: React.FC<AppProps> = ({ initialConversationId, initialAgentId,
   const [promptHistory, setPromptHistory] = useState<PromptHistoryEntry[]>([]);
   const [historyIndex, setHistoryIndex] = useState<number | null>(null);
   const [tempInput, setTempInput] = useState('');
+
+  // OAuth state
+  const [showOAuthDialog, setShowOAuthDialog] = useState(false);
+  const [oauthProvider, setOAuthProvider] = useState<string>('');
+
   const abortControllerRef = useRef<AbortController | null>(null);
   const conversationStartTime = useRef<number>(Date.now());
   const lastCtrlCPress = useRef<number>(0);
   const exitHintTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const [config] = useState(() => getConfig());
+  const [config, setConfig] = useState(() => getConfig());
+
 
   // Get current branch
   const currentBranch = useMemo(() => {
@@ -119,18 +133,41 @@ export const App: React.FC<AppProps> = ({ initialConversationId, initialAgentId,
     return { model, provider };
   }, [config]);
 
-  // Initialize or reinitialize client when agent changes
+  // Check for OAuth code request from global flag (poll every 100ms)
+  useEffect(() => {
+    const checkOAuthFlag = setInterval(() => {
+      const globalWithOAuth = global as unknown as {
+        __oauth_needs_code?: boolean;
+        __oauth_provider?: string;
+      };
+
+      if (globalWithOAuth.__oauth_needs_code && globalWithOAuth.__oauth_provider) {
+        setOAuthProvider(globalWithOAuth.__oauth_provider);
+        setShowOAuthDialog(true);
+        globalWithOAuth.__oauth_needs_code = false;
+      }
+    }, 100); // Check every 100ms
+
+    return () => clearInterval(checkOAuthFlag);
+  }, []);
+
+  // Initialize or reinitialize client when agent OR mode changes
   useEffect(() => {
     const initClient = async () => {
       const baseConfig = getConfig();
-      const tools = await getTools(true);
+      const allTools = await getTools(true);
+      
+      // Update tools state
+      setTools(allTools);
+
+      const modeFilteredTools = filterToolsByMode(allTools, agentMode);
 
       let clientConfig: any;
 
       if (agentId) {
         const agent = await getAgent(agentId);
         if (agent) {
-          clientConfig = createAgentClientConfig(baseConfig, agent.config, tools);
+          clientConfig = createAgentClientConfig(baseConfig, agent.config, modeFilteredTools);
         } else {
           clientConfig = baseConfig;
         }
@@ -144,7 +181,7 @@ export const App: React.FC<AppProps> = ({ initialConversationId, initialAgentId,
     };
 
     initClient();
-  }, [agentId]);
+  }, [agentId, agentMode]); // Re-initialize when mode changes
 
   // Load initial conversation if provided
   useEffect(() => {
@@ -166,15 +203,31 @@ export const App: React.FC<AppProps> = ({ initialConversationId, initialAgentId,
     });
   }, []);
 
+  // Handle OAuth code submission
+  const handleOAuthCodeSubmit = async (code: string) => {
+    try {
+      const { getOAuthManager } = await import('../../auth/oauth-manager-instance.js');
+      const oauthManager = getOAuthManager();
+      const provider = oauthManager.getProvider(oauthProvider);
+
+      if (provider && 'submitAuthCode' in provider) {
+        (provider as any).submitAuthCode(code);
+      }
+    } catch (error) {
+      console.error('Failed to submit OAuth code:', error);
+    }
+  };
+
   // Get mode color and description
   const getModeInfo = (mode: AgentMode) => {
+    const toolDesc = getModeToolDescription(mode);
     switch (mode) {
       case 'PLAN':
-        return { color: BLUE, desc: 'Planning mode - think before acting', emoji: '📋' };
+        return { color: BLUE, desc: 'Planning mode - think before acting', toolDesc, emoji: '📋' };
       case 'ACT':
-        return { color: GREEN, desc: 'Action mode - execute the plan', emoji: '⚡' };
+        return { color: GREEN, desc: 'Action mode - execute the plan', toolDesc, emoji: '⚡' };
       case 'DEBUG':
-        return { color: ORANGE, desc: 'Debug mode - detailed analysis', emoji: '🔍' };
+        return { color: ORANGE, desc: 'Debug mode - detailed analysis', toolDesc, emoji: '🔍' };
     }
   };
 
@@ -185,6 +238,11 @@ export const App: React.FC<AppProps> = ({ initialConversationId, initialAgentId,
     const nextIndex = (currentIndex + 1) % modes.length;
     const newMode = modes[nextIndex];
     setAgentMode(newMode);
+
+    // Show feedback about tool access
+    const modeInfo = getModeInfo(newMode);
+    setError(modeInfo.toolDesc);
+    setTimeout(() => setError(null), 3000);
   };
 
   // Toggle auto mode (Shift+Tab)
@@ -261,6 +319,10 @@ export const App: React.FC<AppProps> = ({ initialConversationId, initialAgentId,
       if (currentIdx > 0) {
         setNavigationIndex(currentIdx - 1);
         setIsHistoricalView(true);
+      } else if (currentIdx === 0) {
+        // Allow staying at message 0
+        setError('At message 0 (beginning of conversation)');
+        setTimeout(() => setError(null), 2000);
       } else {
         setError('At start of conversation');
         setTimeout(() => setError(null), 2000);
@@ -348,15 +410,62 @@ export const App: React.FC<AppProps> = ({ initialConversationId, initialAgentId,
       return; // Prevent 't' from being added to input
     }
 
+    // Ctrl+P to toggle model/provider manager (P = Provider)
+    if (key.ctrl && input === 'p' && !key.shift) {
+      setView(view === 'models' ? 'chat' : 'models');
+      return; // Prevent 'p' from being added to input
+    }
+
+    // Ctrl+Shift+P to toggle permissions manager
+    if (key.ctrl && key.shift && input === 'P') {
+      setView(view === 'permissions' ? 'chat' : 'permissions');
+      return;
+    }
+
+    // Ctrl+D to toggle todo manager (D = Dashboard/Todos)
+    if (key.ctrl && input === 'd') {
+      setView(view === 'todos' ? 'chat' : 'todos');
+      return;
+    }
+
     // Note: Ctrl+R is now handled in InputBox for inline fuzzy search
 
-    // Escape to stop/force stop agent execution
-    if (key.escape && isStreaming) {
-      if (abortControllerRef.current) {
-        abortControllerRef.current.abort();
-        setError('Agent execution stopped by user');
-        setIsStreaming(false);
+    // Escape to exit navigation mode or stop agent execution
+    if (key.escape) {
+      if (isHistoricalView) {
+        // Exit navigation mode
+        setNavigationIndex(null);
+        setIsHistoricalView(false);
+        setError('Exited navigation mode');
+        setTimeout(() => setError(null), 1500);
+        return;
       }
+      if (isStreaming) {
+        // Stop agent execution
+        if (abortControllerRef.current) {
+          abortControllerRef.current.abort();
+          setError('Agent execution stopped by user');
+          setIsStreaming(false);
+        }
+        return;
+      }
+    }
+
+    // Enter to fork from current navigation position
+    if (key.return && isHistoricalView && navigationIndex !== null && currentBranch && !isStreaming) {
+      const forkName = `Fork from msg ${navigationIndex + 1}`;
+      const { conversation: forked, newBranchId } = forkConversation(
+        conversation,
+        navigationIndex,
+        forkName,
+        'Fork from navigation'
+      );
+      setConversation(forked);
+      setIsHistoricalView(false);
+      setNavigationIndex(null);
+      setError(`Forked at message ${navigationIndex + 1}`);
+      setTimeout(() => setError(null), 2000);
+      return;
     }
   });
 
@@ -405,7 +514,7 @@ export const App: React.FC<AppProps> = ({ initialConversationId, initialAgentId,
         // Read and attach files
         for (const filePath of attachedFiles) {
           try {
-            const { content, isInRepo } = await readFileResource(filePath);
+            const { content, isInRepo } = await readFileResource(filePath, process.cwd());
 
             // Only include files that are in the repo
             if (isInRepo) {
@@ -529,8 +638,18 @@ export const App: React.FC<AppProps> = ({ initialConversationId, initialAgentId,
       // Handle abort error gracefully
       if (err instanceof Error && err.name === 'AbortError') {
         setError('Agent execution stopped by user');
+        setErrorDetails(null);
       } else {
-        setError(err instanceof Error ? err.message : String(err));
+        const errorMessage = err instanceof Error ? err.message : String(err);
+        setError(errorMessage);
+
+        // CRITICAL: Capture 400 error details for debugging
+        if (err instanceof Error && (err as any).statusCode === 400) {
+          setErrorDetails((err as any).requestDetails);
+          console.error('💥 400 Error Captured - View details in TUI');
+        } else {
+          setErrorDetails(null);
+        }
       }
     } finally {
       setIsStreaming(false);
@@ -641,9 +760,20 @@ export const App: React.FC<AppProps> = ({ initialConversationId, initialAgentId,
         setView('mcp');
         break;
 
+      case '/model':
+      case '/models':
+        // Show model/provider manager
+        setView('models');
+        break;
+
       case '/config':
         // Show config panel
         setView('config');
+        break;
+
+      case '/permissions':
+        // Show permissions manager
+        setView('permissions');
         break;
 
       case '/help':
@@ -798,8 +928,11 @@ export const App: React.FC<AppProps> = ({ initialConversationId, initialAgentId,
   const handleMCPServerChange = async () => {
     if (!client) return;
 
-    // Reinitialize client to pick up new MCP servers/tools
+    // Reload config to pick up new active model
     const baseConfig = getConfig();
+    setConfig(baseConfig);
+
+    // Reinitialize client to pick up new MCP servers/tools
     const tools = await getTools(true);
 
     let clientConfig: any;
@@ -824,6 +957,7 @@ export const App: React.FC<AppProps> = ({ initialConversationId, initialAgentId,
     setClient(newClient);
   };
 
+
   return (
     <Box flexDirection="column" width="100%" height="100%">
       {/* Header - always visible */}
@@ -841,9 +975,9 @@ export const App: React.FC<AppProps> = ({ initialConversationId, initialAgentId,
       {/* Main Content */}
       <Box flexGrow={1} flexDirection="column">
         {view === 'chat' && (
-          <>
-            {/* Help Section */}
-            {showHelp && (
+            <>
+              {/* Help Section */}
+              {showHelp && (
               <Box marginBottom={1} padding={1}>
                 <Box flexDirection="column">
                   <Text bold color={PURPLE}>BASIC COMMANDS:</Text>
@@ -864,7 +998,11 @@ export const App: React.FC<AppProps> = ({ initialConversationId, initialAgentId,
                   <Text color={BLUE}>/branches</Text>
                   <Text color={WHITE}>  View all conversation branches (Ctrl+B)</Text>
                   <Text color={CYAN}>Ctrl+← / Ctrl+→</Text>
-                  <Text color={WHITE}>  Go back/forward through messages</Text>
+                  <Text color={WHITE}>  Navigate messages (can go to msg 0)</Text>
+                  <Text color={CYAN}>Enter</Text>
+                  <Text color={WHITE}>  Fork from current navigation position</Text>
+                  <Text color={CYAN}>Escape</Text>
+                  <Text color={WHITE}>  Exit navigation mode</Text>
                   <Text color={CYAN}>Ctrl+0</Text>
                   <Text color={WHITE}>  Jump to latest message</Text>
                   <Text></Text>
@@ -875,6 +1013,10 @@ export const App: React.FC<AppProps> = ({ initialConversationId, initialAgentId,
                   <Text color={WHITE}>  Configure settings</Text>
                   <Text color={BLUE}>/mcp</Text>
                   <Text color={WHITE}>  Manage MCP tools and servers (Ctrl+T)</Text>
+                  <Text color={BLUE}>/model</Text>
+                  <Text color={WHITE}>  Select AI provider (Ctrl+P)</Text>
+                  <Text color={BLUE}>/permissions</Text>
+                  <Text color={WHITE}>  Enable/disable tools (Ctrl+Shift+P)</Text>
                   <Text></Text>
                   <Text bold color={PURPLE}>ADVANCED:</Text>
                   <Text color={BLUE}>/compact</Text>
@@ -901,6 +1043,7 @@ export const App: React.FC<AppProps> = ({ initialConversationId, initialAgentId,
                 }
                 isStreaming={isStreaming}
                 verboseMode={verboseMode}
+                tools={tools}
               />
             </Box>
 
@@ -912,7 +1055,7 @@ export const App: React.FC<AppProps> = ({ initialConversationId, initialAgentId,
                 branchName={currentBranch.name}
                 isHistorical={isHistoricalView}
                 canNavigateBack={
-                  (navigationIndex ?? currentBranch.messages.length - 1) > 0
+                  (navigationIndex ?? currentBranch.messages.length - 1) >= 0
                 }
                 canNavigateForward={
                   navigationIndex !== null &&
@@ -920,8 +1063,8 @@ export const App: React.FC<AppProps> = ({ initialConversationId, initialAgentId,
                 }
                 onNavigateBack={() => {
                   const currentIdx = navigationIndex ?? currentBranch.messages.length - 1;
-                  if (currentIdx > 0) {
-                    setNavigationIndex(currentIdx - 1);
+                  if (currentIdx >= 0) {
+                    setNavigationIndex(Math.max(0, currentIdx - 1));
                     setIsHistoricalView(true);
                   }
                 }}
@@ -947,8 +1090,44 @@ export const App: React.FC<AppProps> = ({ initialConversationId, initialAgentId,
 
             {/* Error Display */}
             {error && (
-              <Box marginBottom={1}>
-                <Text bold color={RED}>⚠ {error}</Text>
+              <Box flexDirection="column" marginBottom={1} borderStyle="round" borderColor={RED} paddingX={1}>
+                <Text bold color={RED}>⚠  {error}</Text>
+
+                {/* CRITICAL: Show detailed 400 error info */}
+                {errorDetails && (
+                  <Box flexDirection="column" marginTop={1}>
+                    <Text bold color={YELLOW}>📊 Request Details:</Text>
+                    <Text color={WHITE}>  Messages: {errorDetails.messageCount}</Text>
+                    <Text color={WHITE}>  Tools: {errorDetails.toolCount}</Text>
+                    <Text color={WHITE}>  Request Size: {(errorDetails.requestSize / 1024).toFixed(2)}KB</Text>
+
+                    <Box marginTop={1}>
+                      <Text bold color={YELLOW}>📧 Last Message:</Text>
+                    </Box>
+                    <Text color={CYAN}>  Role: {errorDetails.lastMessage?.role}</Text>
+                    <Text color={WHITE}>  Content: {errorDetails.lastMessage?.content?.substring(0, 150) || '<none>'}...</Text>
+
+                    {errorDetails.messages && errorDetails.messages.length > 0 && (
+                      <Box flexDirection="column" marginTop={1}>
+                        <Text bold color={YELLOW}>📋 All Messages:</Text>
+                        {errorDetails.messages.slice(-5).map((msg: any) => (
+                          <Text key={msg.index} color={DIM_WHITE}>
+                            #{msg.index} ({msg.role}): {msg.contentPreview}...
+                          </Text>
+                        ))}
+                        {errorDetails.messages.length > 5 && (
+                          <Text color={DIM_WHITE}>  ... and {errorDetails.messages.length - 5} more</Text>
+                        )}
+                      </Box>
+                    )}
+
+                    <Box marginTop={1}>
+                      <Text bold color={ORANGE}>
+                        💡 Check stderr for full debugging output
+                      </Text>
+                    </Box>
+                  </Box>
+                )}
               </Box>
             )}
 
@@ -998,11 +1177,41 @@ export const App: React.FC<AppProps> = ({ initialConversationId, initialAgentId,
           />
         )}
 
+        {view === 'permissions' && (
+          <PermissionsManager
+            onCancel={() => setView('chat')}
+            onPermissionsChange={() => {
+              // Reinitialize client when permissions change
+              setClient(null);
+            }}
+          />
+        )}
+
+        {view === 'models' && (
+          <ModelManager
+            onCancel={() => setView('chat')}
+            onProviderChange={handleMCPServerChange}
+          />
+        )}
+
         {view === 'branches' && (
           <BranchSelector
             conversation={conversation}
             onSelect={handleBranchSelect}
             onCancel={() => setView('chat')}
+          />
+        )}
+
+        {view === 'todos' && (
+          <TodoManager onCancel={() => setView('chat')} />
+        )}
+
+        {/* OAuth Code Dialog */}
+        {showOAuthDialog && (
+          <OAuthCodeDialog
+            provider={oauthProvider}
+            onClose={() => setShowOAuthDialog(false)}
+            onSubmit={handleOAuthCodeSubmit}
           />
         )}
       </Box>

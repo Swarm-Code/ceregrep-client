@@ -240,6 +240,8 @@ export async function getMCPTools(): Promise<Tool[]> {
 
         tools.push({
           name: `mcp__${wrapped.name}__${tool.name}`,
+          server: wrapped.name,
+          serverName: wrapped.name,
           async description() {
             return buildDescription();
           },
