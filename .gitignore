@@ -25,10 +25,16 @@ debug-*.log
 test-*.ts
 test-*.sh
 test-*.js
+*-test.ts
+*.bak
+t/
 
 # External repositories cloned for reference
 llxprt-code/
 llxprt*/
+
+# Kode folder
+Kode/
 
 # Python
 __pycache__/

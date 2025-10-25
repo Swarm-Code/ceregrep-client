@@ -553,14 +553,20 @@ async function* runToolsSerially(
       const finalContent = typeof resultContent === 'string' ? resultContent : JSON.stringify(resultContent);
       const safeContent = finalContent.trim() || 'Tool executed successfully (no output)';
 
-      yield createUserMessage([
+      yield createUserMessage(
+        [
+          {
+            type: 'tool_result',
+            tool_use_id: toolUseMessage.id,
+            content: safeContent,
+            is_error: false,
+          },
+        ],
         {
-          type: 'tool_result',
-          tool_use_id: toolUseMessage.id,
-          content: safeContent,
-          is_error: false,
-        },
-      ]);
+          data: lastResult.data,
+          resultForAssistant: safeContent,
+        }
+      );
     } catch (error) {
       console.error(`[AGENT] Tool execution error for ${tool.name}:`, error);
       yield createUserMessage([

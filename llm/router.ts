@@ -55,7 +55,7 @@ export async function querySonnet(
     default:
       return await queryAnthropic(messages, systemPrompt, maxThinkingTokens, tools, abortSignal, {
         ...options,
-        apiKey: options.apiKey || config.apiKey,
+        apiKey: options.apiKey || config.provider?.apiKey || config.apiKey,
         model: options.model || config.model,
         enableThinking,
         ultrathinkMode,

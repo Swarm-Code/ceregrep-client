@@ -56,10 +56,11 @@ export const Header: React.FC<HeaderProps> = ({ model, provider, cwd, agentMode,
       <Box paddingX={2} paddingY={1}>
         {/* Left: ASCII Art */}
         <Box flexDirection="column" marginRight={2}>
-          <Text color={CYAN}>  ▗▄▄▖</Text>
-          <Text color={CYAN}> ▐▛▀▀▘</Text>
-          <Text color={CYAN}> ▐▙▄▄▖</Text>
-          <Text color={CYAN}>  ▀▀▀▘</Text>
+          <Text color={CYAN}>  █   █</Text>
+          <Text color={CYAN}>  █████</Text>
+          <Text color={CYAN}>  █ █ █</Text>
+          <Text color={CYAN}> ███████</Text>
+          <Text color={CYAN}>   █ █</Text>
         </Box>
 
         {/* Right: Info */}

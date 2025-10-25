@@ -73,8 +73,16 @@ export const ConfigSchema = z.object({
   // Anthropic API key (for backward compatibility)
   apiKey: z.string().optional(),
 
+  // OAuth configuration
+  oauth: z.object({
+    enabledProviders: z.record(z.boolean()).optional(), // Map of provider -> enabled state
+  }).optional(),
+
   // MCP servers
   mcpServers: z.record(MCPServerConfigSchema).optional(),
+
+  // Disabled tools (tool permissions)
+  disabledTools: z.array(z.string()).optional().default([]),
 
   // Hooks configuration
   hooks: HooksSchema,

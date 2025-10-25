@@ -1,6 +1,7 @@
-import { NotebookEditTool } from '@tools/NotebookEditTool/NotebookEditTool'
+// NotebookEditTool is excluded from build, so we reference it by string
+// import { NotebookEditTool } from '../NotebookEditTool/NotebookEditTool.js'
 
-export const DESCRIPTION = `This is a tool for editing files. For moving or renaming files, you should generally use the Bash tool with the 'mv' command instead. For larger edits, use the Write tool to overwrite files. For Jupyter notebooks (.ipynb files), use the ${NotebookEditTool.name} instead.
+export const DESCRIPTION = `This is a tool for editing files. For moving or renaming files, you should generally use the Bash tool with the 'mv' command instead. For larger edits, use the Write tool to overwrite files. For Jupyter notebooks (.ipynb files), use the NotebookEdit tool instead.
 
 Before using this tool:
 
