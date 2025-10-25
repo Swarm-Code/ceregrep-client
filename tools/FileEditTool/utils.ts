@@ -1,9 +1,8 @@
 import { isAbsolute, resolve } from 'path'
-import { getCwd } from '@utils/state'
+import { getCwd } from '../../utils/state.js'
 import { readFileSync } from 'fs'
-import { detectFileEncoding } from '@utils/file'
-import { type Hunk } from 'diff'
-import { getPatch } from '@utils/diff'
+import { detectFileEncoding } from '../../utils/file.js'
+import { getPatch, type Hunk } from '../../utils/diff.js'
 
 /**
  * Applies an edit to a file and returns the patch and updated file.

@@ -74,10 +74,21 @@ export async function querySonnet(
     throw new Error('ANTHROPIC_API_KEY environment variable is not set');
   }
 
-  const anthropic = new Anthropic({
-    apiKey,
-    maxRetries: 3,
-  });
+  // Detect OAuth token (starts with 'sk-ant-oat') and create appropriate client
+  const isOAuthToken = apiKey.startsWith('sk-ant-oat');
+
+  const anthropic = isOAuthToken
+    ? new Anthropic({
+        authToken: apiKey, // Use authToken for OAuth Bearer tokens
+        maxRetries: 3,
+        defaultHeaders: {
+          'anthropic-beta': 'oauth-2025-04-20', // Required beta header for OAuth
+        },
+      } as any)
+    : new Anthropic({
+        apiKey, // Use apiKey for regular API keys
+        maxRetries: 3,
+      });
 
   const model = options.model || 'claude-sonnet-4-20250514';
 
@@ -98,7 +109,10 @@ export async function querySonnet(
       model,
       max_tokens: 8192,
       messages: apiMessages,
-      system: systemPrompt.join('\n\n'),
+      // CRITICAL: OAuth tokens require Claude Code system prompt for authentication
+      system: isOAuthToken
+        ? "You are Claude Code, Anthropic's official CLI for Claude."
+        : systemPrompt.join('\n\n'),
       tools: apiTools.length > 0 ? apiTools : undefined,
       temperature: 1,
     };

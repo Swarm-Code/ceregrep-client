@@ -46,12 +46,20 @@ export interface StreamQueryResult {
  * Matches Claude Code's architecture where the SDK doesn't maintain state
  */
 export class ScoutClient {
-  private config = getConfig();
+  private config: any;
   private tools: Tool[] = [];
   private model: string;
   private initialized: boolean = false;
+  private configOverrides: any;
 
-  constructor(options: QueryOptions = {}) {
+  constructor(options: QueryOptions & { disabledTools?: string[] } = {}) {
+    const baseConfig = getConfig();
+    // Merge config overrides
+    this.configOverrides = options;
+    this.config = {
+      ...baseConfig,
+      ...options,
+    };
     this.model = options.model || this.config.model || 'claude-sonnet-4-20250514';
   }
 

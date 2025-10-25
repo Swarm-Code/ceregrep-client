@@ -104,6 +104,10 @@ export interface Tool {
 
   // Generic function handler (for compatibility)
   fn?: any;
+
+  // MCP server metadata (for tools from MCP servers)
+  server?: string;
+  serverName?: string;
 }
 
 export interface CommandContext extends ToolContext {
