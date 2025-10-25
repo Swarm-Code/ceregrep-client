@@ -57,7 +57,6 @@ export class StreamRenderer {
    */
   showPrompt(prompt: string) {
     console.log(chalk.bold.blueBright('Prompt:'), chalk.white(prompt));
-    console.log(); // Single line break after prompt
   }
 
   /**

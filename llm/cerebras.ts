@@ -7,6 +7,7 @@ import OpenAI from 'openai';
 import { randomUUID } from 'crypto';
 import { Tool } from '../core/tool.js';
 import { AssistantMessage, UserMessage } from '../core/messages.js';
+import { countTokens } from '../core/tokens.js';
 import { z } from 'zod';
 import { zodToJsonSchema } from 'zod-to-json-schema';
 
@@ -748,10 +749,13 @@ export async function queryCerebras(
   }
 
   // No truncation here - compaction should happen at agent level BEFORE reaching this point
-  // If we're getting too many messages here, it means auto-compact didn't trigger
+  // If we're getting too many tokens here, it means auto-compact didn't trigger
   // Log a warning but don't truncate (truncation creates broken context)
-  if (cleanedApiMessages.length > 30) {
-    console.warn(`⚠️  Large conversation (${cleanedApiMessages.length} messages) - auto-compact should have triggered earlier`);
+  const totalTokens = countTokens(messages);
+  const contextThreshold = 170000; // 85% of 200k context limit
+  if (totalTokens >= contextThreshold) {
+    const percentUsed = Math.round((totalTokens / 200000) * 100);
+    console.warn(`⚠️  Large conversation (${totalTokens.toLocaleString()} tokens, ${percentUsed}%) - auto-compact should have triggered earlier`);
   }
 
   // CRITICAL VALIDATION: Ensure request can be safely serialized to JSON
