@@ -42,9 +42,9 @@ export function getPatch({
     undefined,
     undefined,
     { context: CONTEXT_LINES },
-  ).hunks.map(_ => ({
+  ).hunks.map((_: Hunk) => ({
     ..._,
-    lines: _.lines.map(_ =>
+    lines: _.lines.map((_: string) =>
       _.replaceAll(AMPERSAND_TOKEN, '&').replaceAll(DOLLAR_TOKEN, '$'),
     ),
   }))
@@ -71,9 +71,9 @@ export function getFileDiff({
     undefined,
     undefined,
     { context: CONTEXT_LINES },
-  ).hunks.map(_ => ({
+  ).hunks.map((_: Hunk) => ({
     ..._,
-    lines: _.lines.map(_ =>
+    lines: _.lines.map((_: string) =>
       _.replaceAll(AMPERSAND_TOKEN, '&').replaceAll(DOLLAR_TOKEN, '$'),
     ),
   }))
