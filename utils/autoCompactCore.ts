@@ -10,36 +10,124 @@ import fs from 'fs';
 import path from 'path';
 
 /**
- * Structured compression prompt that extracts essential context in 8 sections
- * Based on Kodes' proven compression strategy
+ * Enhanced granular compression prompt for maximum context preservation
+ * Extracts extremely detailed technical information in 12+ sections
+ * Designed for accurate continuation of development work
  */
-const COMPRESSION_PROMPT = `Please provide a comprehensive summary of our conversation structured as follows:
+const COMPRESSION_PROMPT = `CRITICAL INSTRUCTION: Create an EXTREMELY DETAILED and GRANULAR summary of our conversation.
 
-## Technical Context
-Development environment, tools, frameworks, and configurations in use. Programming languages, libraries, and technical constraints. File structure, directory organization, and project architecture.
+You MUST include specific file paths, line numbers, function names, variable names, and code snippets.
+It is ALWAYS better to include too much detail than too little.
+NEVER generalize or abstract away important information.
 
-## Project Overview
-Main project goals, features, and scope. Key components, modules, and their relationships. Data models, APIs, and integration patterns.
+## 1. Technical Architecture & Environment
+- Development environment: OS, runtime, Node version
+- Technology stack: All languages, frameworks, libraries, versions
+- Project structure: Directory tree, file organization
+- Key configuration files: tsconfig.json, package.json, docker configs, etc.
+- Build system: Compiler settings, build commands, output locations
+- Deployment targets: Where code runs, environment variables needed
 
-## Code Changes
-Files created, modified, or analyzed during our conversation. Specific code implementations, functions, and algorithms added. Configuration changes and structural modifications.
+## 2. Codebase Structure & Organization
+- Core modules and their purposes
+- File dependencies and import relationships
+- Module entry points and public APIs
+- Design patterns used throughout
+- Naming conventions and standards
+- Folder organization and logical grouping
 
-## Debugging & Issues
-Problems encountered and their root causes. Solutions implemented and their effectiveness. Error messages, logs, and diagnostic information.
+## 3. Implemented Features & Components
+- Each component built: name, location, purpose, exports
+- Data structures created: interfaces, types, schemas
+- Functions implemented: signatures, parameters, return types
+- Classes and their methods: visibility, inheritance
+- Hooks and utilities: how they're used, what they depend on
 
-## Current Status
-What we just completed successfully. Current state of the codebase and any ongoing work. Test results, validation steps, and verification performed.
+## 4. Code Changes & Modifications
+- Files created: path, purpose, initial structure
+- Files modified: specific file paths, line numbers, what changed
+- Code deleted: what was removed and why
+- Refactoring performed: from what to what
+- Include actual code snippets for major changes (50-200 lines of important code)
+- Version numbers and compatibility concerns
 
-## Pending Tasks
-Immediate next steps and priorities. Planned features, improvements, and refactoring. Known issues, technical debt, and areas needing attention.
+## 5. API Endpoints & Route Definitions
+- All endpoints: method, path, parameters, response format
+- Request/response examples: actual JSON structures
+- Authentication/authorization mechanisms
+- Rate limits and constraints
+- Error codes and error handling
 
-## User Preferences
-Coding style, formatting, and organizational preferences. Communication patterns and feedback style. Tool choices and workflow preferences.
+## 6. Database & Data Models
+- Tables/collections: names, schema, relationships
+- Key fields: types, constraints, indexes
+- Data migration notes: versions, changes
+- Query patterns: common operations and patterns
 
-## Key Decisions
-Important technical decisions made and their rationale. Alternative approaches considered and why they were rejected. Trade-offs accepted and their implications.
+## 7. Debugging & Error Resolution
+- All errors encountered: error messages (exact text), stack traces
+- Root causes: what was wrong and why
+- Solutions applied: exact steps taken
+- Files affected by bugs: specific line numbers
+- Performance issues: metrics before/after
+- Incomplete or failed attempts: why they didn't work
 
-Focus on information essential for continuing the conversation effectively, including specific details about code, files, errors, and plans.`;
+## 8. Test Coverage & Validation
+- Tests written: describe what they test
+- Test results: pass/fail status, coverage percentage
+- Validation performed: manual checks, automated testing
+- Known failing tests: which ones, why they fail
+- Edge cases identified: what scenarios need attention
+
+## 9. Performance & Metrics
+- Token counts: conversation tokens, context usage
+- Build times: before/after measurements
+- Runtime performance: slow operations identified
+- Memory usage: if discussed
+- Optimization opportunities: what could be faster
+
+## 10. Current Implementation Status
+- What works: fully implemented features with all details
+- What's incomplete: partial implementations, what's missing
+- What's broken: bugs found, not yet fixed
+- Current git status: what files are modified
+- Next compilation/build result: errors or warnings
+
+## 11. Dependencies & Integrations
+- External libraries used: names, versions, why
+- API integrations: which APIs, endpoints, credentials needed
+- Third-party services: which ones, integration points
+- Custom integrations: internal service connections
+
+## 12. User Requirements & Preferences
+- User's coding style: formatting, indentation, naming
+- Architecture preferences: patterns they like/dislike
+- Optimization priorities: speed vs. clarity vs. features
+- Communication style: how detailed should responses be
+- Tool preferences: which tools to use, avoid
+
+## 13. Important Context & History
+- Why specific decisions were made: full rationale
+- Alternatives considered: what else was tried
+- Trade-offs accepted: what was sacrificed for what
+- Lessons learned: mistakes to avoid
+- Previous iterations: what changed and why
+
+## 14. Continuation Instructions
+- Exact next steps: what needs to happen immediately
+- Prerequisite work: what must be done first
+- Dependencies: what other features need first
+- Testing requirements: how to verify the work
+- File locations to focus on: which files matter most
+
+## OUTPUT FORMAT:
+Use clear markdown formatting with headers, bullet points, and code blocks.
+For code snippets, include file path and line numbers in the format: filename.ts:123
+For complex logic, show before/after code comparisons.
+Include token counts and context window status.
+
+Remember: Include specific details, file paths, line numbers, and code snippets.
+A summary that's 30% too detailed is better than one that's 10% too vague.`;
 
 /**
  * Configuration for auto-compact persistence and behavior
@@ -269,10 +357,38 @@ async function executeAutoCompact(
   // Create summary request
   const summaryRequest = createUserMessage(COMPRESSION_PROMPT);
 
-  // Query LLM for summary
+  // Query LLM for summary with enhanced compression instructions
   const summaryResponse = await querySonnetFn(
     normalizeMessagesForAPI([...messagesToSummarize, summaryRequest]),
-    ['You are a helpful AI assistant tasked with creating comprehensive conversation summaries that preserve all essential context for continuing development work.'],
+    [
+      'You are an expert at creating comprehensive technical conversation summaries.',
+      'Your task is to preserve ALL critical technical details from the conversation for continuing development work.',
+      '',
+      'CRITICAL REQUIREMENTS:',
+      '- Include specific file paths, line numbers, function names, and variable names',
+      '- Preserve all code snippets and implementation details',
+      '- Document every error with exact error messages and stack traces',
+      '- Record all decisions with full rationale and alternatives considered',
+      '- Include metrics, measurements, and before/after comparisons',
+      '- Preserve token counts and context usage information',
+      '- List all dependencies, integrations, and external services',
+      '- Document user preferences, coding style, and communication patterns',
+      '',
+      'QUALITY STANDARDS:',
+      '- Be explicit and detailed, never abstract or generalize',
+      '- Include 2x more detail than seems necessary',
+      '- If uncertain whether to include something, include it',
+      '- Use structured formatting with clear sections and subsections',
+      '- Show code examples with file paths and line numbers in this format: filename.ts:123',
+      '- Include git status and file modification information',
+      '',
+      'OPTIMIZATION PRIORITY:',
+      '1. Preserve exact technical details (code, files, line numbers)',
+      '2. Document all errors and their solutions',
+      '3. Record decisions and alternatives',
+      '4. Include metrics and performance data',
+      '5. User preferences and style guide',
+    ],
     0,
     toolUseContext.options?.tools || [],
     toolUseContext.abortController?.signal || new AbortController().signal,

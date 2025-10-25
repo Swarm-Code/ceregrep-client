@@ -187,36 +187,12 @@ export const BashTool: Tool = {
         // Convert AnsiOutput to plain text
         const ansiOutput = cumulativeOutput as AnsiOutput;
 
-        // Trim trailing empty lines to remove excessive spacing
-        let lastContentIndex = ansiOutput.length - 1;
-        while (lastContentIndex >= 0) {
-          const line = ansiOutput[lastContentIndex];
-          const lineText = line.map((segment) => segment.text).join('').trim();
-          if (lineText) break;
-          lastContentIndex--;
-        }
+        // Convert to string, removing all empty lines and trim trailing whitespace
+        const lines = ansiOutput
+          .map((line) => line.map((segment) => segment.text).join('').trimEnd()) // Trim trailing whitespace
+          .filter((line) => line.trim() !== ''); // Remove all blank lines
 
-        // Convert to string, keeping only content-bearing lines
-        const lines = ansiOutput.slice(0, lastContentIndex + 1)
-          .map((line) => line.map((segment) => segment.text).join(''));
-
-        // Also trim excessive blank lines within the output (keep max 1 blank line between content)
-        const processedLines: string[] = [];
-        let lastWasBlank = false;
-        for (const line of lines) {
-          const isBlank = line.trim() === '';
-          if (isBlank) {
-            if (!lastWasBlank) {
-              processedLines.push(line);
-              lastWasBlank = true;
-            }
-          } else {
-            processedLines.push(line);
-            lastWasBlank = false;
-          }
-        }
-
-        stdout = processedLines.join('\n');
+        stdout = lines.join('\n');
       } else if (typeof cumulativeOutput === 'string') {
         stdout = cumulativeOutput;
       }
