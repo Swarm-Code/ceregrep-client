@@ -6,6 +6,7 @@
 
 import { Message, UserMessage, AssistantMessage, createUserMessage, normalizeMessagesForAPI } from '../core/messages.js';
 import { countTokens, shouldCompact as shouldCompactCheck } from '../core/tokens.js';
+import { extractAllSections, mergeSections } from './autoCompactSections.js';
 import fs from 'fs';
 import path from 'path';
 
@@ -354,64 +355,57 @@ async function executeAutoCompact(
 
   console.log(`[AUTO-COMPACT] Summarizing ${messagesToSummarize.length} messages, preserving ${recentMessages.length} recent`);
 
-  // Create summary request
-  const summaryRequest = createUserMessage(COMPRESSION_PROMPT);
-
-  // Query LLM for summary with enhanced compression instructions
-  const summaryResponse = await querySonnetFn(
-    normalizeMessagesForAPI([...messagesToSummarize, summaryRequest]),
-    [
-      'You are an expert at creating comprehensive technical conversation summaries.',
-      'Your task is to preserve ALL critical technical details from the conversation for continuing development work.',
-      '',
-      'CRITICAL REQUIREMENTS:',
-      '- Include specific file paths, line numbers, function names, and variable names',
-      '- Preserve all code snippets and implementation details',
-      '- Document every error with exact error messages and stack traces',
-      '- Record all decisions with full rationale and alternatives considered',
-      '- Include metrics, measurements, and before/after comparisons',
-      '- Preserve token counts and context usage information',
-      '- List all dependencies, integrations, and external services',
-      '- Document user preferences, coding style, and communication patterns',
-      '',
-      'QUALITY STANDARDS:',
-      '- Be explicit and detailed, never abstract or generalize',
-      '- Include 2x more detail than seems necessary',
-      '- If uncertain whether to include something, include it',
-      '- Use structured formatting with clear sections and subsections',
-      '- Show code examples with file paths and line numbers in this format: filename.ts:123',
-      '- Include git status and file modification information',
-      '',
-      'OPTIMIZATION PRIORITY:',
-      '1. Preserve exact technical details (code, files, line numbers)',
-      '2. Document all errors and their solutions',
-      '3. Record decisions and alternatives',
-      '4. Include metrics and performance data',
-      '5. User preferences and style guide',
-    ],
-    0,
-    toolUseContext.options?.tools || [],
-    toolUseContext.abortController?.signal || new AbortController().signal,
+  // Extract all sections in parallel for maximum efficiency
+  const sections = await extractAllSections(
+    normalizeMessagesForAPI(messagesToSummarize),
+    querySonnetFn,
     {
       dangerouslySkipPermissions: false,
       model: toolUseContext.options?.slowAndCapableModel || 'claude-3-5-sonnet-20241022',
       prependCLISysprompt: true,
+      tools: toolUseContext.options?.tools || [],
+      signal: toolUseContext.abortController?.signal || new AbortController().signal,
     },
   );
 
-  // Zero out input tokens to avoid double-counting
-  if (summaryResponse.message.usage) {
-    summaryResponse.message.usage = {
-      ...summaryResponse.message.usage,
-      input_tokens: 0,
-      cache_creation_input_tokens: 0,
-      cache_read_input_tokens: 0,
-    };
-  }
+  // Merge all sections into a single comprehensive summary
+  const mergedSummaryText = mergeSections(sections);
+
+  // Create summary response message
+  const summaryResponse: AssistantMessage = {
+    type: 'assistant',
+    message: {
+      id: Math.random().toString(36).substring(7),
+      model: toolUseContext.options?.slowAndCapableModel || 'claude-3-5-sonnet-20241022',
+      role: 'assistant',
+      stop_reason: 'end_turn',
+      stop_sequence: null,
+      type: 'message',
+      content: [
+        {
+          type: 'text' as const,
+          text: mergedSummaryText,
+          citations: [],
+        },
+      ],
+      usage: {
+        input_tokens: 0,
+        output_tokens: 0,
+        cache_creation_input_tokens: 0,
+        cache_read_input_tokens: 0,
+        cache_creation: null,
+        server_tool_use: null,
+        service_tier: null,
+      },
+    },
+    costUSD: 0,
+    durationMs: 0,
+    uuid: Math.random().toString(36).substring(7) as any,
+  };
 
   // Build new message array starting fresh with summary + recent
   const compactedMessages: Message[] = [
-    createUserMessage('Context automatically compressed due to token limit. Essential information preserved.'),
+    createUserMessage('Context automatically compressed due to token limit. Essential information preserved with 8 parallel extraction sections.'),
     summaryResponse,
     ...recentMessages,
   ];
