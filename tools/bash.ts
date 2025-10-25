@@ -155,8 +155,8 @@ export const BashTool: Tool = {
       // Line wrapping breaks output mid-word (e.g., "sys.stderr" → "sys.s\ntderr")
       // which can cause 400 errors when sent to Cerebras API
       const shellExecutionConfig: ShellExecutionConfig = {
-        terminalWidth: 1000, // Large width to prevent wrapping
-        terminalHeight: 1000, // Large height to prevent pagination
+        terminalWidth: process.stdout.columns || 1000, // Use actual terminal width
+        terminalHeight: process.stdout.rows || 30, // Use actual terminal height, fallback to 30
         showColor: true,
       };
 
@@ -186,9 +186,37 @@ export const BashTool: Tool = {
       if (hasAnsiOutput && Array.isArray(cumulativeOutput)) {
         // Convert AnsiOutput to plain text
         const ansiOutput = cumulativeOutput as AnsiOutput;
-        stdout = ansiOutput
-          .map((line) => line.map((segment) => segment.text).join(''))
-          .join('\n');
+
+        // Trim trailing empty lines to remove excessive spacing
+        let lastContentIndex = ansiOutput.length - 1;
+        while (lastContentIndex >= 0) {
+          const line = ansiOutput[lastContentIndex];
+          const lineText = line.map((segment) => segment.text).join('').trim();
+          if (lineText) break;
+          lastContentIndex--;
+        }
+
+        // Convert to string, keeping only content-bearing lines
+        const lines = ansiOutput.slice(0, lastContentIndex + 1)
+          .map((line) => line.map((segment) => segment.text).join(''));
+
+        // Also trim excessive blank lines within the output (keep max 1 blank line between content)
+        const processedLines: string[] = [];
+        let lastWasBlank = false;
+        for (const line of lines) {
+          const isBlank = line.trim() === '';
+          if (isBlank) {
+            if (!lastWasBlank) {
+              processedLines.push(line);
+              lastWasBlank = true;
+            }
+          } else {
+            processedLines.push(line);
+            lastWasBlank = false;
+          }
+        }
+
+        stdout = processedLines.join('\n');
       } else if (typeof cumulativeOutput === 'string') {
         stdout = cumulativeOutput;
       }
