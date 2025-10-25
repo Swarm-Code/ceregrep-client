@@ -20,6 +20,7 @@ import {
 import { countTokens, shouldCompact } from './tokens.js';
 import { executePreToolUseHooks, executePostToolUseHooks } from './hooks.js';
 import { getConfig } from '../config/loader.js';
+import { checkAutoCompact, logCompactMetrics } from '../utils/autoCompactCore.js';
 
 export type CanUseToolFn = (
   toolName: string,
@@ -60,9 +61,24 @@ export async function* query(
 ): AsyncGenerator<Message, void> {
   const fullSystemPrompt = formatSystemPromptFn(systemPrompt, context);
 
+  // Kodes-based auto-compact: Check if context limit is approaching
+  const compactResult = await checkAutoCompact(messages, toolUseContext, querySonnetFn);
+  if (compactResult.wasCompacted) {
+    console.log('\n✨ [AUTO-COMPACT] Context successfully compressed\n');
+    // Yield the compaction notification message
+    yield createUserMessage('Context automatically compressed due to token limit. Essential information preserved.');
+    // Yield the summary message if it exists
+    if (compactResult.summary) {
+      yield compactResult.summary;
+    }
+    // Update messages array with compacted version
+    messages = compactResult.messages;
+  }
+
   // Check token count before query (debug only, no warnings to AI)
   if (toolUseContext.options.debug) {
     const currentTokens = countTokens(messages);
+    logCompactMetrics(messages);
     console.log('[AGENT] Starting query with:', {
       messageCount: messages.length,
       systemPromptLength: fullSystemPrompt.length,
@@ -161,18 +177,44 @@ export async function* query(
 
   const toolResults: UserMessage[] = [];
 
-  // Execute tools
-  // TODO: Add concurrent execution for read-only tools
-  for await (const message of runToolsSerially(
-    toolUseMessages,
-    assistantMessage,
-    canUseTool,
-    toolUseContext,
-    false, // shouldSkipPermissionCheck
-  )) {
-    yield message;
-    if (message.type === 'user') {
-      toolResults.push(message);
+  // Kodes improvement: Check if tools can run concurrently (read-only)
+  const canRunConcurrently = toolUseMessages.every(msg => {
+    const tool = toolUseContext.options.tools?.find(t => t.name === msg.name);
+    return tool && 'isReadOnly' in tool && typeof (tool as any).isReadOnly === 'function'
+      ? (tool as any).isReadOnly()
+      : false;
+  });
+
+  if (toolUseContext.options.debug) {
+    console.log(`[AGENT] Tool execution mode: ${canRunConcurrently ? 'concurrent' : 'serial'}`);
+  }
+
+  // Execute tools (concurrently or serially based on tool types)
+  if (canRunConcurrently) {
+    for await (const message of runToolsConcurrently(
+      toolUseMessages,
+      assistantMessage,
+      canUseTool,
+      toolUseContext,
+      false, // shouldSkipPermissionCheck
+    )) {
+      yield message;
+      if (message.type === 'user') {
+        toolResults.push(message);
+      }
+    }
+  } else {
+    for await (const message of runToolsSerially(
+      toolUseMessages,
+      assistantMessage,
+      canUseTool,
+      toolUseContext,
+      false, // shouldSkipPermissionCheck
+    )) {
+      yield message;
+      if (message.type === 'user') {
+        toolResults.push(message);
+      }
     }
   }
 
@@ -204,6 +246,180 @@ export async function* query(
     querySonnetFn,
     formatSystemPromptFn,
   );
+}
+
+/**
+ * Execute tools concurrently (all at once)
+ * Only use when all tools are read-only and have no side effects
+ */
+async function* runToolsConcurrently(
+  toolUseMessages: ToolUseBlock[],
+  assistantMessage: AssistantMessage,
+  canUseTool: CanUseToolFn,
+  toolUseContext: ToolContext,
+  shouldSkipPermissionCheck: boolean,
+): AsyncGenerator<Message, void> {
+  // Create promises for all tool executions
+  const toolPromises = toolUseMessages.map((toolUseMessage) =>
+    executeToolSafely(
+      toolUseMessage,
+      assistantMessage,
+      canUseTool,
+      toolUseContext,
+      shouldSkipPermissionCheck,
+    ),
+  );
+
+  // Wait for all tools to complete
+  const results = await Promise.all(toolPromises);
+
+  // Yield results in order
+  for (const result of results) {
+    yield result;
+  }
+}
+
+/**
+ * Safely execute a single tool and handle errors
+ */
+async function executeToolSafely(
+  toolUseMessage: ToolUseBlock,
+  assistantMessage: AssistantMessage,
+  canUseTool: CanUseToolFn,
+  toolUseContext: ToolContext,
+  shouldSkipPermissionCheck: boolean,
+): Promise<Message> {
+  if (toolUseContext.options.debug) {
+    console.log('[AGENT] Executing tool:', toolUseMessage.name);
+  }
+
+  const tool = toolUseContext.options.tools?.find(t => t.name === toolUseMessage.name);
+
+  if (!tool) {
+    console.error(`[AGENT] Tool not found: ${toolUseMessage.name}`);
+    return createUserMessage([
+      {
+        type: 'tool_result',
+        tool_use_id: toolUseMessage.id,
+        content: `Error: Tool "${toolUseMessage.name}" not found`,
+        is_error: true,
+      },
+    ]);
+  }
+
+  try {
+    // Check permissions
+    const hasPermission =
+      shouldSkipPermissionCheck ||
+      (await canUseTool(tool.name, toolUseMessage.input as Record<string, any>, shouldSkipPermissionCheck));
+
+    if (!hasPermission) {
+      console.log(`[AGENT] Permission denied for tool: ${tool.name}`);
+      return createUserMessage([
+        {
+          type: 'tool_result',
+          tool_use_id: toolUseMessage.id,
+          content: 'Permission denied by user',
+          is_error: true,
+        },
+      ]);
+    }
+
+    // Execute tool with pre/post hooks
+    if (!tool.call) {
+      throw new Error(`Tool ${tool.name} does not have a call method`);
+    }
+
+    const config = toolUseContext.config || getConfig();
+    const toolDescription = typeof tool.description === 'function'
+      ? await tool.description()
+      : tool.description;
+
+    // Execute PreToolUse hooks
+    const preHookResult = await executePreToolUseHooks(config, {
+      toolName: tool.name,
+      toolInput: toolUseMessage.input as Record<string, unknown>,
+      toolDescription,
+    });
+
+    // If hook blocked the tool, return error
+    if (preHookResult.blocked) {
+      console.log(`[AGENT] Tool ${tool.name} blocked by PreToolUse hook: ${preHookResult.message}`);
+      return createUserMessage([
+        {
+          type: 'tool_result',
+          tool_use_id: toolUseMessage.id,
+          content: `Blocked by hook: ${preHookResult.message}`,
+          is_error: true,
+        },
+      ]);
+    }
+
+    const finalInput = preHookResult.modifiedInput || toolUseMessage.input;
+
+    // Execute tool and collect results
+    let lastResult: any = null;
+    let executionError: any = null;
+
+    try {
+      for await (const result of tool.call(finalInput, toolUseContext, canUseTool)) {
+        if (result.type === 'result') {
+          lastResult = result;
+        }
+      }
+
+      if (!lastResult) {
+        throw new Error(`Tool ${tool.name} did not return a result`);
+      }
+    } catch (error) {
+      executionError = error;
+    }
+
+    // Execute PostToolUse hooks (fire and forget)
+    executePostToolUseHooks(config, {
+      toolName: tool.name,
+      toolInput: finalInput as Record<string, unknown>,
+      toolDescription,
+      result: lastResult?.data,
+      error: executionError ? (executionError instanceof Error ? executionError.message : String(executionError)) : undefined,
+    }).catch((err) => {
+      if (toolUseContext.options.debug) {
+        console.error(`[AGENT] PostToolUse hook error for ${tool.name}:`, err);
+      }
+    });
+
+    // If tool execution failed, throw the error
+    if (executionError) {
+      throw executionError;
+    }
+
+    // Format result for assistant
+    const resultContent = tool.renderResultForAssistant
+      ? tool.renderResultForAssistant(lastResult.data)
+      : lastResult.resultForAssistant || JSON.stringify(lastResult.data);
+
+    const finalContent = typeof resultContent === 'string' ? resultContent : JSON.stringify(resultContent);
+    const safeContent = finalContent.trim() || 'Tool executed successfully (no output)';
+
+    return createUserMessage([
+      {
+        type: 'tool_result',
+        tool_use_id: toolUseMessage.id,
+        content: safeContent,
+        is_error: false,
+      },
+    ]);
+  } catch (error) {
+    console.error(`[AGENT] Tool execution error for ${tool.name}:`, error);
+    return createUserMessage([
+      {
+        type: 'tool_result',
+        tool_use_id: toolUseMessage.id,
+        content: `Error: ${error instanceof Error ? error.message : String(error)}`,
+        is_error: true,
+      },
+    ]);
+  }
 }
 
 /**
@@ -359,71 +575,3 @@ async function* runToolsSerially(
   }
 }
 
-/**
- * Compact conversation history by summarizing with LLM
- * Reduces token count while preserving recent context
- *
- * @param messages - Full conversation history
- * @param tools - Available tools
- * @param querySonnetFn - LLM query function
- * @param model - Model to use for summarization
- * @param abortSignal - Abort signal
- * @param keepRecentCount - Number of recent messages to preserve (default 10)
- */
-export async function compact(
-  messages: Message[],
-  tools: Tool[],
-  querySonnetFn: (
-    messages: any[],
-    systemPrompt: string[],
-    maxThinkingTokens: number,
-    tools: Tool[],
-    signal: AbortSignal,
-    options: any,
-  ) => Promise<AssistantMessage>,
-  model: string,
-  abortSignal: AbortSignal,
-  keepRecentCount: number = 10,
-): Promise<{ summary: AssistantMessage; clearedMessages: Message[]; recentMessages: Message[] }> {
-  // If not enough messages to compact, return as-is
-  if (messages.length <= keepRecentCount) {
-    return {
-      summary: createAssistantMessage('No compaction needed.'),
-      clearedMessages: [],
-      recentMessages: messages,
-    };
-  }
-
-  // Split messages into older (to summarize) and recent (to keep)
-  const messagesToSummarize = messages.slice(0, -keepRecentCount);
-  const recentMessages = messages.slice(-keepRecentCount);
-
-  // Create summary request
-  const summaryRequest = createUserMessage(
-    'Provide a detailed but concise summary of the conversation above. ' +
-      'Focus on: key decisions made, important context discovered, files analyzed, ' +
-      'code patterns identified, and any outstanding tasks. ' +
-      'Be specific with file paths, function names, and technical details.',
-  );
-
-  // Generate summary from older messages
-  const summaryResponse = await querySonnetFn(
-    normalizeMessagesForAPI([...messagesToSummarize, summaryRequest]),
-    ['You are a helpful AI assistant tasked with summarizing technical conversations. ' +
-     'Preserve all technical details, file paths, and specific implementation context.'],
-    0,
-    tools,
-    abortSignal,
-    {
-      dangerouslySkipPermissions: false,
-      model,
-      prependCLISysprompt: false,
-    },
-  );
-
-  return {
-    summary: summaryResponse,
-    clearedMessages: messagesToSummarize,
-    recentMessages,
-  };
-}

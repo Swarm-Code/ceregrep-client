@@ -6,10 +6,9 @@
 import OpenAI from 'openai';
 import { randomUUID } from 'crypto';
 import { Tool } from '../core/tool.js';
-import { AssistantMessage, UserMessage, Message, createUserMessage } from '../core/messages.js';
+import { AssistantMessage, UserMessage } from '../core/messages.js';
 import { z } from 'zod';
 import { zodToJsonSchema } from 'zod-to-json-schema';
-import { compact as agentCompact } from '../core/agent.js';
 
 const CEREBRAS_BASE_URL = 'https://api.cerebras.ai/v1';
 const CEREBRAS_COST_PER_MILLION_TOKENS = 2.0; // Both input and output
@@ -520,7 +519,6 @@ export async function queryCerebras(
     temperature?: number;
     top_p?: number;
   },
-  _isRetryAfterCompaction: boolean = false,
 ): Promise<AssistantMessage> {
   // Rate limiting: ensure minimum delay between requests
   const now = Date.now();
@@ -724,7 +722,7 @@ export async function queryCerebras(
 
   // COMPREHENSIVE FINAL CLEANING: Clean all messages before sending to Cerebras
   // This ensures we never send malformed data regardless of what Cerebras sent us
-  const cleanedApiMessages = apiMessages.map(msg => cleanMessageForCerebras(msg));
+  let cleanedApiMessages = apiMessages.map(msg => cleanMessageForCerebras(msg));
 
   const startTime = Date.now();
   const timestamp = Date.now();
@@ -749,125 +747,11 @@ export async function queryCerebras(
       : {}),
   }
 
-  // REQUEST SIZE VALIDATION: Check and reduce request size if needed
-  // Cerebras API has undocumented size limits (~1-2MB JSON payload)
-  const requestJson = JSON.stringify(requestParams);
-  const requestSizeBytes = requestJson.length;
-  const requestSizeKB = (requestSizeBytes / 1024).toFixed(2);
-  const requestSizeMB = (requestSizeBytes / (1024 * 1024)).toFixed(2);
-  const MAX_REQUEST_SIZE_BYTES = 1_500_000; // 1.5MB conservative limit
-
-  // Log telemetry for all requests
-  // console.error(`📊 [Request Stats] ${requestParams.messages.length} messages, ${requestSizeKB}KB payload`);
-
-  if (requestSizeBytes > MAX_REQUEST_SIZE_BYTES) {
-    console.error(`⚠️  [Request Size Limit] Request size ${requestSizeMB}MB exceeds safe limit of ${(MAX_REQUEST_SIZE_BYTES / (1024 * 1024)).toFixed(2)}MB`);
-
-    // If this is already a retry after compaction, we can't compact further
-    if (_isRetryAfterCompaction) {
-      console.error(`   ❌ Already tried compaction - request still too large`);
-      throw new Error(
-        `Request size (${requestSizeMB}MB) exceeds limit even after compaction. ` +
-        `Try starting a new conversation or reducing tool output sizes.`
-      );
-    }
-
-    console.error(`   🔄 AUTO-COMPACTING conversation to reduce size...`);
-    console.error(``);
-
-    // Convert API messages back to our Message format for compaction
-    const originalMessages: Message[] = messages;
-
-    if (originalMessages.length <= 10) {
-      console.error(`   ❌ Only ${originalMessages.length} messages - can't compact further`);
-      throw new Error(
-        `Request too large but too few messages to compact. ` +
-        `Try reducing tool output sizes or starting a new conversation.`
-      );
-    }
-
-    try {
-      // Use the SDK's compact function
-      console.error(`   📝 Generating summary of old messages...`);
-
-      // Create a wrapper that includes the API key and options
-      const queryFnWithOptions = async (
-        msgs: any[],
-        sysPrompt: string[],
-        maxThinking: number,
-        toolsParam: Tool[],
-        signal: AbortSignal,
-        opts: any,
-      ) => {
-        return await queryCerebras(
-          msgs,
-          sysPrompt,
-          maxThinking,
-          toolsParam,
-          signal,
-          {
-            ...opts,
-            apiKey: options.apiKey, // CRITICAL: Pass through API key
-            baseURL: options.baseURL,
-            model: options.model || 'llama-3.3-70b',
-          },
-          true, // Mark as compaction call to prevent infinite recursion
-        );
-      };
-
-      const compacted = await agentCompact(
-        originalMessages,
-        tools,
-        queryFnWithOptions,
-        options.model || 'llama-3.3-70b',
-        abortSignal,
-        10, // Keep last 10 messages
-      );
-
-      console.error(`   ✅ Compacted ${compacted.clearedMessages.length} messages into summary`);
-      console.error(`   📦 Retrying with ONLY summary (no old messages)...`);
-      console.error(``);
-
-      // Build new message array: ONLY the summary as a user message
-      // This matches Claude Code's pattern - no tool outputs, no old messages
-      // Just the summary to start fresh
-
-      // Extract text content from summary
-      let summaryText = '';
-      const summaryContent = compacted.summary.message.content;
-      if (Array.isArray(summaryContent)) {
-        summaryText = summaryContent
-          .filter((block: any) => block.type === 'text')
-          .map((block: any) => block.text)
-          .join('\n');
-      } else if (typeof summaryContent === 'string') {
-        summaryText = summaryContent;
-      }
-
-      const compactedMessages: Message[] = [
-        createUserMessage(
-          'The conversation history has been compacted into this summary:\n\n' + summaryText
-        ),
-      ];
-
-      // Retry the query with ONLY the summary
-      // No old messages - completely fresh start with context preserved in summary
-      return await queryCerebras(
-        compactedMessages as (UserMessage | AssistantMessage)[],
-        systemPrompt,
-        maxThinkingTokens,
-        tools, // Still pass tools - agent needs them for new queries
-        abortSignal,
-        options,
-        true, // Mark as retry after compaction
-      );
-    } catch (compactError) {
-      console.error(`   ❌ Auto-compaction failed:`, compactError);
-      throw new Error(
-        `Request too large and auto-compaction failed. ` +
-        `Use /compact command manually or start a new conversation.`
-      );
-    }
+  // No truncation here - compaction should happen at agent level BEFORE reaching this point
+  // If we're getting too many messages here, it means auto-compact didn't trigger
+  // Log a warning but don't truncate (truncation creates broken context)
+  if (cleanedApiMessages.length > 30) {
+    console.warn(`⚠️  Large conversation (${cleanedApiMessages.length} messages) - auto-compact should have triggered earlier`);
   }
 
   // CRITICAL VALIDATION: Ensure request can be safely serialized to JSON
