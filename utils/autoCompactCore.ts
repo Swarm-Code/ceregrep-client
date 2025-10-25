@@ -7,8 +7,8 @@
 import { Message, UserMessage, AssistantMessage, createUserMessage, normalizeMessagesForAPI } from '../core/messages.js';
 import { countTokens, shouldCompact as shouldCompactCheck } from '../core/tokens.js';
 import { extractAllSections, mergeSections } from './autoCompactSections.js';
-import fs from 'fs';
-import path from 'path';
+import * as fs from 'fs';
+import * as pathModule from 'path';
 
 /**
  * Enhanced granular compression prompt for maximum context preservation
@@ -154,7 +154,7 @@ class CompactHistoryManager {
   }> = [];
 
   constructor(historyPath: string = '.compact-history.json') {
-    this.historyFile = path.resolve(process.cwd(), historyPath);
+    this.historyFile = pathModule.resolve(process.cwd(), historyPath);
     this.loadHistory();
   }
 
