@@ -17,6 +17,7 @@ export class StreamRenderer {
   private accumulatedMessages: Message[] = [];
   private lastAssistantMessage: any = null; // Track last assistant message for token info
   private enc = getEncoding('cl100k_base'); // Use tiktoken for accurate counting (cl100k_base for GPT-3.5-turbo/4)
+  private toolNameMap: Map<string, string> = new Map(); // Map tool_use_id to tool name
 
   constructor(verbose: boolean = false) {
     this.verbose = verbose;
@@ -108,6 +109,15 @@ export class StreamRenderer {
     if (toolUseBlocks.length > 0) {
       this.currentToolCount = toolUseBlocks.length;
 
+      // Store tool names for later display with results
+      for (const toolBlock of toolUseBlocks) {
+        const toolId = (toolBlock as any).id;
+        const toolName = (toolBlock as any).name;
+        if (toolId) {
+          this.toolNameMap.set(toolId, toolName);
+        }
+      }
+
       // Create tool execution display
       const toolNames = toolUseBlocks.map((t: any) => {
         const toolName = t.name;
@@ -175,8 +185,14 @@ export class StreamRenderer {
       this.currentToolCount = toolUseBlocks.length;
 
       for (const toolBlock of toolUseBlocks) {
+        const toolId = (toolBlock as any).id;
         const toolName = (toolBlock as any).name;
         const toolInput = (toolBlock as any).input;
+
+        // Store tool name for later display with results
+        if (toolId) {
+          this.toolNameMap.set(toolId, toolName);
+        }
 
         // Format tool input for display
         const inputPreview = this.formatToolInput(toolName, toolInput);
@@ -229,6 +245,9 @@ export class StreamRenderer {
       const statusIcon = isError ? chalk.red('✗') : chalk.green('✓');
       const statusText = isError ? chalk.red('ERROR') : chalk.green('OK');
 
+      // Get tool name from stored map
+      const toolName = this.toolNameMap.get(toolUseId) || 'Unknown';
+
       // Build token display with context warning
       let tokenDisplay = `[${cumulativeTokens.toLocaleString()} tokens, ${percentUsed}%]`;
       if (cumulativeTokens >= contextThreshold) {
@@ -237,7 +256,7 @@ export class StreamRenderer {
 
       console.log(
         chalk.dim('└─ ') + statusIcon + ' ' +
-        chalk.gray(`Tool result`) + ' ' +
+        chalk.cyan(`${toolName}`) + ' ' +
         statusText + ' ' +
         chalk.dim(tokenDisplay)
       );
@@ -249,29 +268,44 @@ export class StreamRenderer {
       const totalTokens = this.countOutputTokens(outputStr);
       const maxTokens = 200; // Max tokens to display in output preview
 
-      // Truncate based on tokens: binary search to find cutoff point
+      // For errors (especially scout_query), show full output without truncation
+      const isScoutQueryError = isError && toolName === 'scout_query';
       let displayOutput = outputStr;
-      const isTruncated = totalTokens > maxTokens;
-      if (isTruncated) {
-        // Find approximate position where we have ~maxTokens
-        let cutoff = Math.floor((maxTokens / totalTokens) * outputStr.length);
-        displayOutput = outputStr.substring(0, cutoff) + '...';
+      let isTruncated = false;
+
+      if (!isError) {
+        // Only truncate non-error outputs
+        isTruncated = totalTokens > maxTokens;
+        if (isTruncated) {
+          // Find approximate position where we have ~maxTokens
+          let cutoff = Math.floor((maxTokens / totalTokens) * outputStr.length);
+          displayOutput = outputStr.substring(0, cutoff) + '...';
+        }
       }
 
       if (displayOutput.trim()) {
-        // Show first line or shortened version for compact display
-        const lines = displayOutput.trim().split('\n');
-        const firstLine = lines[0];
-
-        if (lines.length > 1) {
-          // For multi-line output, show preview
-          console.log(chalk.dim('   └─ ') + chalk.gray(firstLine));
-          console.log(chalk.dim(`   └─ [${lines.length} lines, ${totalTokens} tokens${isTruncated ? `, showing ~${maxTokens}` : ''}]`));
+        if (isScoutQueryError) {
+          // For scout_query errors, show full output with special formatting
+          console.log(chalk.red('╔════════════════════════════════════════════════════════════════╗'));
+          console.log(chalk.red('║') + ' ' + chalk.bold('Scout Query Error Details'));
+          console.log(chalk.red('╚════════════════════════════════════════════════════════════════╝'));
+          console.log(chalk.gray(displayOutput));
+          console.log('');
         } else {
-          // For single line, show full content
-          console.log(chalk.dim('   └─ ') + chalk.gray(displayOutput.trim()));
-          if (isTruncated) {
-            console.log(chalk.dim(`   └─ [Output truncated: ${totalTokens} tokens total, showing ~${maxTokens}]`));
+          // Show first line or shortened version for compact display
+          const lines = displayOutput.trim().split('\n');
+          const firstLine = lines[0];
+
+          if (lines.length > 1) {
+            // For multi-line output, show preview
+            console.log(chalk.dim('   └─ ') + chalk.gray(firstLine));
+            console.log(chalk.dim(`   └─ [${lines.length} lines, ${totalTokens} tokens${isTruncated ? `, showing ~${maxTokens}` : ''}]`));
+          } else {
+            // For single line, show full content
+            console.log(chalk.dim('   └─ ') + chalk.gray(displayOutput.trim()));
+            if (isTruncated) {
+              console.log(chalk.dim(`   └─ [Output truncated: ${totalTokens} tokens total, showing ~${maxTokens}]`));
+            }
           }
         }
       }
