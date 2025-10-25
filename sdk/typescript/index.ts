@@ -11,12 +11,13 @@
 
 import { Tool } from '../../core/tool.js';
 import { Message, createUserMessage } from '../../core/messages.js';
-import { query as agentQuery, compact as agentCompact } from '../../core/agent.js';
+import { query as agentQuery } from '../../core/agent.js';
 import { ContentBlockParam } from '@anthropic-ai/sdk/resources/index.mjs';
 import { getTools } from '../../tools/index.js';
 import { getConfig } from '../../config/loader.js';
 import { querySonnet, formatSystemPromptWithContext } from '../../llm/router.js';
 import { shouldCompact, countTokens, getTokenStats } from '../../core/tokens.js';
+import { checkAutoCompact } from '../../utils/autoCompactCore.js';
 
 export interface QueryOptions {
   model?: string;

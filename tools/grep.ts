@@ -8,6 +8,12 @@ import { z } from 'zod';
 import { Tool } from '../core/tool.js';
 import { ripGrep } from '../utils/ripgrep.js';
 import { resolve } from 'path';
+import {
+  isOutputTooLarge,
+  truncateOutput,
+  getMaxTokensForTool,
+  estimateTokens,
+} from '../utils/tool-response-limiter.js';
 
 const inputSchema = z.strictObject({
   pattern: z
@@ -48,15 +54,31 @@ export const GrepTool: Tool = {
     // For now, always require permissions
     return true;
   },
-  renderResultForAssistant({ numFiles, filenames }) {
+  renderResultForAssistant({ numFiles, filenames }, pattern?: string) {
     if (numFiles === 0) {
       return 'No files found';
     }
+
+    // Build result with all filenames first
     let result = `Found ${numFiles} file${numFiles === 1 ? '' : 's'}\n${filenames.slice(0, MAX_RESULTS).join('\n')}`;
     if (numFiles > MAX_RESULTS) {
-      result +=
-        '\n(Results are truncated. Consider using a more specific path or pattern.)';
+      result += '\n(Results are truncated. Consider using a more specific path or pattern.)';
     }
+
+    // TOKEN-BASED OUTPUT LIMITING: Prevent massive file lists from bloating context
+    const maxTokens = getMaxTokensForTool('Grep');
+
+    if (isOutputTooLarge(result, maxTokens)) {
+      const estimatedTokens = estimateTokens(result);
+      console.error(`🚫 [Output Blocked] Grep results too large: ~${estimatedTokens.toLocaleString()} tokens. Max: ${maxTokens.toLocaleString()} tokens`);
+
+      // Truncate with context-specific suggestions
+      result = truncateOutput(result, maxTokens, {
+        toolName: 'Grep',
+        pattern: pattern || 'unknown',
+      });
+    }
+
     return result;
   },
   async *call({ pattern, path, include }, { abortController }) {
@@ -106,7 +128,7 @@ export const GrepTool: Tool = {
 
       yield {
         type: 'result',
-        resultForAssistant: this.renderResultForAssistant!(output),
+        resultForAssistant: this.renderResultForAssistant!(output, pattern),
         data: output,
       };
     } catch (error) {

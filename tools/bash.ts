@@ -13,6 +13,12 @@ import type {
   ShellExecutionConfig,
 } from '../services/shell-execution.js';
 import type { AnsiOutput } from '../utils/terminalSerializer.js';
+import {
+  isOutputTooLarge,
+  truncateOutput,
+  getMaxTokensForTool,
+  estimateTokens,
+} from '../utils/tool-response-limiter.js';
 
 const inputSchema = z.strictObject({
   command: z.string().describe('The command to execute'),
@@ -76,7 +82,7 @@ export const BashTool: Tool = {
 
     return { success: true, result: true };
   },
-  renderResultForAssistant({ interrupted, stdout, stderr }) {
+  renderResultForAssistant({ interrupted, stdout, stderr }, command?: string) {
     let errorMessage = stderr.trim();
     if (interrupted) {
       if (stderr) errorMessage += EOL;
@@ -85,36 +91,22 @@ export const BashTool: Tool = {
     let trimmedStdout = stdout.trim();
     const trimmedStderr = errorMessage.trim();
 
-    // OUTPUT SIZE LIMIT: Block oversized outputs to prevent context bloat and API errors
-    // Limit based on lines for simplicity and clarity
-    const MAX_OUTPUT_LINES = 2000;
-    const numLines = (trimmedStdout.match(/\n/g) || []).length + 1;
+    // TOKEN-BASED OUTPUT LIMITING: Prevent context bloat and API errors
+    // Uses token estimation (3 chars/token) instead of lines for accurate limits
+    const maxTokens = getMaxTokensForTool('Bash');
 
-    if (numLines > MAX_OUTPUT_LINES) {
-      console.error(`🚫 [Output Blocked] Command output too large: ${numLines.toLocaleString()} lines (max: ${MAX_OUTPUT_LINES.toLocaleString()} lines)`);
+    if (isOutputTooLarge(trimmedStdout, maxTokens)) {
+      const estimatedTokens = estimateTokens(trimmedStdout);
+      const numLines = (trimmedStdout.match(/\n/g) || []).length + 1;
+      const charCount = trimmedStdout.length;
 
-      // Return error message with smart suggestions to avoid too-granular queries
-      trimmedStdout = `<error>Command output is too large (${numLines.toLocaleString()} lines). Maximum allowed: ${MAX_OUTPUT_LINES.toLocaleString()} lines
+      console.error(`🚫 [Output Blocked] Bash output too large: ${charCount.toLocaleString()} chars ≈ ${estimatedTokens.toLocaleString()} tokens (${numLines.toLocaleString()} lines). Max: ${maxTokens.toLocaleString()} tokens`);
 
-SMART ALTERNATIVES (don't break into tiny pieces):
-
-1. SCOPE DOWN YOUR QUERY - Ask more specific questions instead of "tell me about everything"
-   Example: Instead of "explain all files" → "explain the agent architecture" or "how does tool execution work"
-
-2. USE TARGETED FILE PATTERNS - Filter by directory or file type
-   Example: find . -name "*.ts" -path "*/agents/*" (not find . -name "*.ts")
-   Example: ls -la agents/ tools/ core/ (not ls -la)
-
-3. USE GREP WITH PATTERNS - Search for relevant content, not dump everything
-   Example: grep -r "export.*Agent" --include="*.ts" agents/
-   Example: grep -r "class.*Tool" --include="*.ts" tools/
-
-4. RETHINK YOUR APPROACH - Maybe you don't need to read raw output
-   - Instead of catting 20 files → Ask "what are the main components and how do they interact"
-   - Instead of finding all files → Ask "where is X functionality implemented"
-   - Let your understanding guide focused queries, not brute-force data gathering
-
-DON'T fragment into many tiny commands. Think strategically about what you actually need.</error>`;
+      // Truncate with context-specific suggestions
+      trimmedStdout = truncateOutput(trimmedStdout, maxTokens, {
+        toolName: 'Bash',
+        command: command || 'unknown',
+      });
     }
 
     const hasBoth = trimmedStdout && trimmedStderr;
@@ -224,7 +216,7 @@ DON'T fragment into many tiny commands. Think strategically about what you actua
 
       yield {
         type: 'result',
-        resultForAssistant: this.renderResultForAssistant!(output),
+        resultForAssistant: this.renderResultForAssistant!(output, command),
         data: output,
       };
     } catch (error) {

@@ -96,7 +96,8 @@ export interface Tool {
   userFacingName?: string | (() => string) | ((input: any) => string);
 
   // Result formatting for LLM
-  renderResultForAssistant?: (data: any) => string | any[];
+  // Optional second parameter for context (e.g., command, pattern, etc.) for better error messages
+  renderResultForAssistant?: (data: any, context?: any) => string | any[];
 
   // Prompt/description alternatives
   prompt?: string | ((options?: any) => string | Promise<string>);
