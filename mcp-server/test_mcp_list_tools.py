@@ -8,7 +8,7 @@ from pathlib import Path
 # Add mcp-server directory to path
 sys.path.insert(0, str(Path(__file__).parent))
 
-from ceregrep_mcp.server import handle_list_tools
+from scout_mcp.server import handle_list_tools
 
 async def test_list_tools():
     """Test the list_tools handler."""
