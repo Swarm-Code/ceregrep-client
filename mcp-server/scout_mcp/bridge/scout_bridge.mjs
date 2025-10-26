@@ -22,8 +22,9 @@ import { createInterface } from 'readline';
 import { CeregrepClient as ScoutClient } from 'swarm-scout/sdk';
 import { getTools, getConfig } from 'swarm-scout';
 // Use relative imports for non-exported modules (bridge is in Scout repo)
-import { getAgent, listAgents } from '../../../../dist/agents/index.js';
-import { createAgentClientConfig } from '../../../../dist/agents/config-merger.js';
+// Path: mcp-server/scout_mcp/bridge/ -> scout/ (3 levels up)
+import { getAgent, listAgents } from '../../../dist/agents/index.js';
+import { createAgentClientConfig } from '../../../dist/agents/config-merger.js';
 
 // Global Scout client instance (initialized lazily)
 let scoutClient = null;

@@ -80,12 +80,17 @@ class ScoutBridgeClient:
 
         try:
             # Start the Node.js bridge as a persistent subprocess
+            # Set cwd to Scout root (3 levels up from bridge script) so agents can be found
+            bridge_dir = Path(self.bridge_script_path).parent
+            scout_root = bridge_dir.parent.parent.parent
+
             self.process = await asyncio.create_subprocess_exec(
                 'node',
                 self.bridge_script_path,
                 stdin=asyncio.subprocess.PIPE,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
+                cwd=str(scout_root),
             )
 
             # Wait for ready signal on stderr
