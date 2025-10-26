@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """MCP server for Scout - exposes Scout query capabilities and agents to other systems.
 
-PERFORMANCE OPTIMIZATION (v1.1.0):
+PERFORMANCE OPTIMIZATION (v1.1.1):
 This server now uses a persistent Node.js bridge process to communicate with Scout's SDK,
 eliminating the overhead of spawning subprocesses for each query/agent invocation.
 
@@ -142,7 +142,7 @@ async def main():
                 write_stream,
                 InitializationOptions(
                     server_name="scout-mcp-server",
-                    server_version="1.1.0",  # Minor bump: performance optimization, backward compatible
+                    server_version="1.1.1",  # Minor bump: performance optimization, backward compatible
                     capabilities=app.get_capabilities(
                         notification_options=NotificationOptions(),
                         experimental_capabilities={},

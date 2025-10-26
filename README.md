@@ -44,7 +44,10 @@ npm run build
 
 # Install globally from source
 npm link
+
 ```
+
+> **Note:** `npm run build` automatically terminates lingering Scout MCP server processes so new code loads on the next run. Set `SCOUT_SKIP_MCP_CLEANUP=1` to skip this behaviour (for example, in CI).
 
 After running `npm link`, you can use the `swarm-scout` command anywhere in your system.
 
@@ -180,6 +183,8 @@ Connect to any MCP server to extend functionality. Configure servers in `.swarmr
   }
 }
 ```
+
+> **Directory tree results:** The `mcp__filesystem__directory_tree` tool now returns an auto-condensed summary to stay within LLM token limits. When you need the full JSON, pass `{ "mode": "raw" }` (or `raw: true`) in the tool arguments to disable summarisation.
 
 ## API Reference
 

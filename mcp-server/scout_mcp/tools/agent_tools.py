@@ -1,6 +1,6 @@
 """Dynamically expose Scout agents as MCP tools.
 
-PERFORMANCE OPTIMIZATION (v1.1.0):
+PERFORMANCE OPTIMIZATION (v1.1.1):
 This module now uses a persistent Node.js bridge process instead of spawning
 subprocess calls to the Scout CLI for both agent discovery and invocation.
 

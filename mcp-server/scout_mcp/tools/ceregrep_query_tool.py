@@ -1,6 +1,6 @@
 """Scout query tool for finding context in codebases.
 
-PERFORMANCE OPTIMIZATION (v1.1.0):
+PERFORMANCE OPTIMIZATION (v1.1.1):
 This tool now uses a persistent Node.js bridge process instead of spawning
 subprocess calls to the Scout CLI. This eliminates ~1-3s of overhead per query.
 
