@@ -1,6 +1,6 @@
 """Tool discovery system for MCP server.
 
-PERFORMANCE OPTIMIZATION (v1.1.0):
+PERFORMANCE OPTIMIZATION (v1.1.1):
 Implements intelligent caching with file modification time (mtime) tracking to avoid
 repeated file system scans and module imports. Tools are only re-imported when their
 source files are actually modified.

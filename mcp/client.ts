@@ -238,6 +238,8 @@ export async function getMCPTools(): Promise<Tool[]> {
           return desc;
         };
 
+        let lastInputForRender: Record<string, unknown> | undefined;
+
         tools.push({
           name: `mcp__${wrapped.name}__${tool.name}`,
           server: wrapped.name,
@@ -279,21 +281,27 @@ export async function getMCPTools(): Promise<Tool[]> {
                   }
                 }
 
+                lastInputForRender = cleanedInput;
+
                 const result = await wrapped.client.callTool({
                   name: tool.name,
                   arguments: cleanedInput,
                 });
 
-                // Success - yield result
+        // Success - yield result
                 yield {
                   type: 'result',
                   data: result,
-                  resultForAssistant: formatMCPResult(result),
+                  resultForAssistant: formatMCPResult(result, {
+                    toolName: tool.name,
+                    serverName: wrapped.name,
+                    input: cleanedInput,
+                  }),
                 };
                 return; // Exit successfully
               } catch (error) {
                 lastError = error instanceof Error ? error : new Error(String(error));
-                const errorMessage = lastError.message;
+        const errorMessage = lastError.message;
 
                 // Check if it's a 400 error or similar request error
                 const is400Error = errorMessage.includes('400') ||
@@ -329,17 +337,11 @@ export async function getMCPTools(): Promise<Tool[]> {
             throw new Error(`Error calling MCP tool ${tool.name}: ${lastError?.message || 'Unknown error'}`);
           },
           renderResultForAssistant: (data: any) => {
-            if (typeof data === 'string') return data;
-            if (Array.isArray(data)) {
-              return data
-                .map((item: any) => {
-                  if (item.type === 'text') return item.text;
-                  if (item.type === 'image') return '[Image]';
-                  return JSON.stringify(item);
-                })
-                .join('\n');
-            }
-            return JSON.stringify(data, null, 2);
+            return formatMCPResult(data, {
+              toolName: tool.name,
+              serverName: wrapped.name,
+              input: lastInputForRender,
+            });
           },
         });
       }
@@ -357,15 +359,308 @@ export async function getMCPTools(): Promise<Tool[]> {
 /**
  * Format MCP tool results for display
  */
-function formatMCPResult(result: any): string {
+function formatMCPResult(
+  result: any,
+  context: { toolName?: string; serverName?: string; input?: Record<string, unknown> } = {}
+): string {
+  const wantsRaw = shouldUseRawMode(context.input);
+
+  if (context.toolName === 'directory_tree' && !wantsRaw) {
+    const summary = summarizeDirectoryTree(result, context);
+    if (summary) {
+      return summary;
+    }
+  }
+
+  return formatResultDefault(result, { truncate: !wantsRaw });
+}
+
+type DirectoryTreeNode = {
+  name: string;
+  type: 'file' | 'directory';
+  children?: DirectoryTreeNode[];
+};
+
+function summarizeDirectoryTree(
+  result: any,
+  context: { toolName?: string; serverName?: string; input?: Record<string, unknown> }
+): string | null {
+  const rawText = extractFirstTextContent(result);
+  if (!rawText) return null;
+
+  try {
+    const root = JSON.parse(rawText) as DirectoryTreeNode;
+    if (!root || typeof root !== 'object') {
+      return null;
+    }
+
+    const topLevel = Array.isArray(root.children) ? root.children : [];
+
+    const statsCache = new WeakMap<DirectoryTreeNode, DirectoryStats>();
+    const getStats = (node: DirectoryTreeNode | undefined): DirectoryStats => {
+      if (!node) {
+        return { directories: 0, files: 0, maxDepth: 0 };
+      }
+      const cached = statsCache.get(node);
+      if (cached) return cached;
+
+      const isDirectory = node.type === 'directory';
+      let directories = isDirectory ? 1 : 0;
+      let files = node.type === 'file' ? 1 : 0;
+      let maxDepth = 1;
+
+      if (isDirectory && Array.isArray(node.children)) {
+        let childMaxDepth = 0;
+        for (const child of node.children) {
+          const childStats = getStats(child);
+          directories += childStats.directories;
+          files += childStats.files;
+          childMaxDepth = Math.max(childMaxDepth, childStats.maxDepth);
+        }
+        maxDepth = 1 + childMaxDepth;
+      }
+
+      const computed: DirectoryStats = { directories, files, maxDepth };
+      statsCache.set(node, computed);
+      return computed;
+    };
+
+    const totals = getStats(root);
+    const rootIsDirectory = root.type === 'directory' ? 1 : 0;
+    const totalDirectories = Math.max(totals.directories - rootIsDirectory, 0);
+    const totalFiles = totals.files;
+
+    const budget = computeSummaryBudget(rawText.length);
+    const reserveForNotes = 200;
+    const workingBudget = Math.max(0, budget - reserveForNotes);
+    const approxTokens = Math.max(1, Math.round(budget / 4));
+
+    const lines: string[] = [];
+    let charCount = 0;
+    let truncated = false;
+
+    const tryAddLine = (line: string): boolean => {
+      const nextCount = charCount + line.length + 1;
+      if (nextCount > workingBudget) {
+        truncated = true;
+        return false;
+      }
+      lines.push(line);
+      charCount = nextCount;
+      return true;
+    };
+
+    const addLine = (line: string): boolean => {
+      const added = tryAddLine(line);
+      return added;
+    };
+
+    addLine('📁 Directory tree summary (auto-condensed)');
+    addLine(
+      context.serverName
+        ? `Server: ${context.serverName}, tool: ${context.toolName}`
+        : `Tool: ${context.toolName}`
+    );
+    addLine(
+      `Total directories: ${totalDirectories.toLocaleString()} • Total files: ${totalFiles.toLocaleString()} • Estimated tree depth: ${Math.max(
+        0,
+        totals.maxDepth - 1
+      )}`
+    );
+
+    const directoryEntries = topLevel
+      .filter((child): child is DirectoryTreeNode => !!child && child.type === 'directory')
+      .map((child) => {
+        const childStats = getStats(child);
+        const totalEntries = Math.max(childStats.directories - 1, 0) + childStats.files;
+        return {
+          node: child,
+          stats: childStats,
+          totalEntries,
+        };
+      })
+      .sort((a, b) => b.totalEntries - a.totalEntries);
+
+    const fileEntries = topLevel
+      .filter((child): child is DirectoryTreeNode => !!child && child.type === 'file')
+      .map((child) => child.name);
+
+    if (directoryEntries.length > 0) {
+      addLine(
+        `Top-level directories (${directoryEntries.length.toLocaleString()} total, sorted by size):`
+      );
+
+      const detailScale =
+        (budget - MIN_SUMMARY_CHAR_BUDGET) / (MAX_SUMMARY_CHAR_BUDGET - MIN_SUMMARY_CHAR_BUDGET);
+      const normalizedScale = Math.max(0, Math.min(1, detailScale));
+      const maxChildSamples = Math.max(1, Math.min(5, Math.round(normalizedScale * 4) + 1));
+      const maxFileSamples = Math.max(1, Math.min(4, Math.round(normalizedScale * 3) + 1));
+
+      for (const entry of directoryEntries) {
+        if (
+          !addLine(
+            `  - ${entry.node.name}/ — subdirectories: ${Math.max(
+              entry.stats.directories - 1,
+              0
+            ).toLocaleString()}, files: ${entry.stats.files.toLocaleString()}, depth: ${
+              entry.stats.maxDepth - 1
+            }`
+          )
+        ) {
+          break;
+        }
+
+        if (!Array.isArray(entry.node.children) || !entry.node.children.length) {
+          continue;
+        }
+
+        const childDirectories = entry.node.children
+          .filter((child): child is DirectoryTreeNode => child.type === 'directory')
+          .map((child) => ({
+            node: child,
+            stats: getStats(child),
+          }))
+          .sort((a, b) => {
+            const aTotal = Math.max(a.stats.directories - 1, 0) + a.stats.files;
+            const bTotal = Math.max(b.stats.directories - 1, 0) + b.stats.files;
+            return bTotal - aTotal;
+          })
+          .slice(0, maxChildSamples);
+
+        for (const child of childDirectories) {
+          if (
+            !addLine(
+              `    • ${child.node.name}/ — subdirs: ${Math.max(
+                child.stats.directories - 1,
+                0
+              ).toLocaleString()}, files: ${child.stats.files.toLocaleString()}, depth: ${
+                child.stats.maxDepth - 1
+              }`
+            )
+          ) {
+            break;
+          }
+        }
+
+        if (truncated) break;
+
+        const childFiles = entry.node.children
+          .filter((child): child is DirectoryTreeNode => child.type === 'file')
+          .slice(0, maxFileSamples);
+
+        if (childFiles.length > 0 && !truncated) {
+          const fileLine = `    • files: ${childFiles
+            .map((file) => file.name)
+            .join(', ')}${entry.node.children.filter((child) => child.type === 'file').length > childFiles.length
+            ? ' …'
+            : ''}`;
+          if (!addLine(fileLine)) {
+            break;
+          }
+        }
+
+        if (truncated) break;
+      }
+    }
+
+    if (!truncated && fileEntries.length > 0) {
+      const topFileSampleLimit = Math.max(
+        5,
+        Math.min(20, Math.round(approxTokens / 500))
+      );
+      addLine(
+        `Top-level files (${fileEntries.length.toLocaleString()} total): ${fileEntries
+          .slice(0, topFileSampleLimit)
+          .join(', ')}${fileEntries.length > topFileSampleLimit ? ' …' : ''}`
+      );
+    }
+
+    if (!truncated) {
+      const suggestedTargets = directoryEntries.slice(0, Math.min(3, directoryEntries.length));
+      if (suggestedTargets.length > 0) {
+        addLine('');
+        addLine('Suggested follow-ups:');
+        for (const target of suggestedTargets) {
+          const depthHint = Math.min(Math.max(target.stats.maxDepth - 1, 1), 4);
+          const hint = `  - Narrow scan: directory_tree { "path": "${target.node.name}", "max_depth": ${depthHint} }`;
+          if (!addLine(hint)) {
+            break;
+          }
+        }
+      }
+    }
+
+    if (!truncated) {
+      const depthHint = Math.min(Math.max(totals.maxDepth - 1, 1), 5);
+      addLine('');
+      addLine(
+        `Full tree omitted to stay within ~${approxTokens.toLocaleString()} tokens (~${budget.toLocaleString()} characters).`
+      );
+      addLine(
+        `Tip: provide {"max_depth": ${depthHint}} or target specific directories for deeper dives.`
+      );
+    } else {
+      addFinalNote(lines, budget, charCount, approxTokens);
+    }
+
+    return lines.join('\n');
+  } catch (error) {
+    if (process.env.DEBUG_MCP) {
+      console.warn(
+        '[MCP] Failed to summarize directory_tree output:',
+        error instanceof Error ? error.message : String(error)
+      );
+    }
+    return null;
+  }
+}
+
+const MIN_SUMMARY_CHAR_BUDGET = 4000;
+const MAX_SUMMARY_CHAR_BUDGET = 40000;
+const SUMMARY_RATIO = 0.06;
+
+function computeSummaryBudget(rawLength: number): number {
+  const scaled = Math.floor(rawLength * SUMMARY_RATIO);
+  return Math.max(MIN_SUMMARY_CHAR_BUDGET, Math.min(MAX_SUMMARY_CHAR_BUDGET, scaled));
+}
+
+function addFinalNote(
+  lines: string[],
+  budget: number,
+  currentLength: number,
+  approxTokens: number
+) {
+  const noteLines = [
+    `… Additional entries omitted automatically to stay within ~${approxTokens.toLocaleString()} tokens.`,
+    'Tip: provide {"max_depth": <n>} or narrow the `path` to inspect specific subtrees.',
+  ];
+
+  for (const note of noteLines) {
+    while (currentLength + note.length + 1 > budget && lines.length > 0) {
+      const removed = lines.pop();
+      if (!removed) break;
+      currentLength -= removed.length + 1;
+    }
+
+    if (currentLength + note.length + 1 <= budget) {
+      lines.push(note);
+      currentLength += note.length + 1;
+    }
+  }
+}
+
+function formatResultDefault(
+  result: any,
+  options: { truncate?: boolean } = {}
+): string {
+  const { truncate = true } = options;
+
   if (!result) return '';
 
-  // Handle toolResult response
   if ('toolResult' in result && result.toolResult) {
     return String(result.toolResult);
   }
 
-  // Handle content array response
   if (Array.isArray(result?.content)) {
     return result.content
       .map((item: any) => {
@@ -376,12 +671,65 @@ function formatMCPResult(result: any): string {
       .join('\n');
   }
 
-  // Handle error response
   if (result.isError) {
     return `Error: ${result.error || 'Unknown error'}`;
   }
 
-  return JSON.stringify(result);
+  const serialized = JSON.stringify(result);
+  const MAX_LENGTH = 20000;
+  if (truncate && serialized.length > MAX_LENGTH) {
+    return (
+      serialized.slice(0, MAX_LENGTH) +
+      `\n\n[Output truncated to ${MAX_LENGTH.toLocaleString()} characters. ` +
+      `Original length was ${serialized.length.toLocaleString()} characters. ` +
+      `Consider requesting a narrower result if more detail is required.]`
+    );
+  }
+
+  return serialized;
+}
+
+function extractFirstTextContent(result: any): string | null {
+  if (!result) return null;
+
+  if (typeof result === 'string') {
+    return result;
+  }
+
+  if (typeof result.toolResult === 'string') {
+    return result.toolResult;
+  }
+
+  if (Array.isArray(result?.content)) {
+    for (const item of result.content) {
+      if (item && item.type === 'text' && typeof item.text === 'string') {
+        return item.text;
+      }
+    }
+  }
+
+  return null;
+}
+
+type DirectoryStats = {
+  directories: number;
+  files: number;
+  maxDepth: number;
+};
+
+function shouldUseRawMode(input?: Record<string, unknown>): boolean {
+  if (!input) return false;
+  const mode = (input as Record<string, unknown> & { mode?: unknown }).mode;
+  if (typeof mode === 'string' && mode.toLowerCase() === 'raw') {
+    return true;
+  }
+
+  const rawFlag = (input as Record<string, unknown> & { raw?: unknown }).raw;
+  if (rawFlag === true || rawFlag === 'true') {
+    return true;
+  }
+
+  return false;
 }
 
 /**

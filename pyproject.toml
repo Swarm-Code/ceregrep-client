@@ -1,6 +1,6 @@
 [project]
 name = "scout"
-version = "1.1.0"
+version = "1.1.1"
 description = "Scout MCP server."
 requires-python = ">=3.12.11"
 dependencies = [
