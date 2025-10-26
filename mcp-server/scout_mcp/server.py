@@ -68,7 +68,7 @@ async def handle_list_tools() -> list[Tool]:
     current_tools = tool_discovery.discover_tools()
 
     # Add agent tools
-    agent_tools = agent_tool_generator.discover_agent_tools()
+    agent_tools = await agent_tool_generator.discover_agent_tools()
 
     # Combine all tools
     all_tools = {**current_tools, **agent_tools}
@@ -85,7 +85,7 @@ async def handle_call_tool(name: str, arguments: dict) -> list[TextContent]:
         return await tool.execute(arguments)
 
     # Check agent tools
-    agent_tools = agent_tool_generator.discover_agent_tools()
+    agent_tools = await agent_tool_generator.discover_agent_tools()
     agent_tool = agent_tools.get(name)
     if agent_tool:
         return await agent_tool.execute(arguments)

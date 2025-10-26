@@ -109,10 +109,10 @@ class AgentToolGenerator:
         """Create a tool for a specific agent."""
         return AgentTool(agent_id, agent_name, agent_description, self.bridge_client)
 
-    def discover_agent_tools(self) -> Dict[str, BaseTool]:
+    async def discover_agent_tools(self) -> Dict[str, BaseTool]:
         """Discover all agents and create tools for them."""
         tools = {}
-        agents = self._list_agents()
+        agents = await self._list_agents_async()
 
         for agent in agents:
             agent_id = agent.get("id")
