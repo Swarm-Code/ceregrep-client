@@ -17,8 +17,7 @@
     "allowSyntheticDefaultImports": true,
     "jsx": "react",
     "jsxFactory": "React.createElement",
-    "jsxFragmentFactory": "React.Fragment",
-    "types": ["node", "react"]
+    "jsxFragmentFactory": "React.Fragment"
   },
   "include": [
     "**/*.ts",
