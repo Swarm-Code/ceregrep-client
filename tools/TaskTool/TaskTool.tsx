@@ -1,6 +1,6 @@
 import { TextBlock } from '@anthropic-ai/sdk/resources/index.mjs'
 import chalk from 'chalk'
-import { last, memoize } from 'lodash-es'
+import { last, memoize } from 'lodash'
 import { EOL } from 'os'
 import React, { useState, useEffect } from 'react'
 import { Box, Text } from 'ink'

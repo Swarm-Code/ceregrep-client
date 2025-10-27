@@ -12,7 +12,7 @@ import {
   ToolResultBlockParam,
   ToolUseBlock,
 } from '@anthropic-ai/sdk/resources/index.mjs';
-import { last } from 'lodash-es';
+import { last } from 'lodash';
 
 export type { ToolUseBlock };
 
