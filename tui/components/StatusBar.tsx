@@ -147,15 +147,6 @@ export const StatusBar: React.FC<StatusBarProps> = ({
               <Text color={CYAN}>●</Text>
             </>
           )}
-          {heapInfo && !showExitHint && (
-            <>
-              <Text color={DIM_WHITE}>  </Text>
-              <Text color={WHITE}>⚙</Text>
-              <Text color={getHeapColor()}>
-                {heapInfo.used}/{heapInfo.total}MB {heapInfo.percentage}%
-              </Text>
-            </>
-          )}
         </Box>
 
         {/* Right side: Shell Mode or Mode + Model */}

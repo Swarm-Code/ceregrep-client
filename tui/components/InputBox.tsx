@@ -14,8 +14,7 @@ import React, {
 } from 'react';
 import { Box, Text, useInput } from 'ink';
 import { EfficientTextInput } from './common/EfficientTextInput.js';
-import { listRepoFiles, FileResource } from '../../mcp/resources.js';
-import { getMCPResources } from '../../mcp/client.js';
+import { loadResourcesFromWorker } from '../workers/resourceLoaderPool.js';
 import { PromptHistoryEntry } from '../prompt-history.js';
 import {
   readClipboardContent,
@@ -25,6 +24,7 @@ import {
   createTextPreview,
 } from '../../utils/clipboard.js';
 import { randomUUID } from 'crypto';
+import { log, logWithThreshold } from '../utils/diagnostics.js';
 
 interface InputBoxProps {
   onSubmit: (value: string, attachedFiles?: string[], attachedImages?: ImageAttachment[]) => void;
@@ -100,8 +100,14 @@ export const InputBox = React.memo(
     const [pastePreview, setPastePreview] = useState<string | null>(null);
 
     const notifyChange = useCallback((next: string) => {
+      const startTime = performance.now();
+      log(`KEYSTROKE: char="${next.slice(-1)}" len=${next.length}`, false); // No stack trace (high frequency)
       if (externalOnChange) {
         externalOnChange(next);
+      }
+      const duration = performance.now() - startTime;
+      if (duration > 0) {
+        log(`KEYSTROKE_DONE: len=${next.length} took ${duration.toFixed(2)}ms`, false); // No stack trace
       }
     }, [externalOnChange]);
 
@@ -214,29 +220,17 @@ export const InputBox = React.memo(
         return;
       }
 
-      // Warm cache: combine hardcoded filesystem + optional MCP resources
-      Promise.all([
-        // 1. ALWAYS get local filesystem files (hardcoded)
-        listRepoFiles(process.cwd()).then(files =>
-          files.map(f => ({
-            uri: f.uri,
-            name: f.name,
-            absolutePath: f.absolutePath,
-          }))
-        ).catch(() => []),
-
-        // 2. OPTIONALLY get MCP resources (if configured)
-        getMCPResources().then(resources =>
-          resources.map(r => ({
-            uri: r.uri,
-            name: r.name || r.uri.split('/').pop() || r.uri,
-            absolutePath: r.uri.startsWith('file://') ? decodeURIComponent(r.uri.slice(7)) : r.uri,
-          }))
-        ).catch(() => []),
-      ]).then(([filesystemResources, mcpResources]) => {
-        // Combine both sources (filesystem is always present, MCP is optional)
-        resourcesCache.current = [...filesystemResources, ...mcpResources];
-      });
+      // Warm cache: load resources from worker process on component mount
+      loadResourcesFromWorker(process.cwd())
+        .then((resources) => {
+          // Cache the loaded resources for future lookups
+          resourcesCache.current = resources;
+          log(`RESOURCE_CACHE_WARMED: ${resources.length} resources loaded`);
+        })
+        .catch((error) => {
+          log(`RESOURCE_CACHE_WARM_ERROR: ${error instanceof Error ? error.message : 'unknown'}`);
+          // Cache warming is non-blocking, errors here are logged but not critical
+        });
     }, []);
 
     useEffect(() => {
@@ -252,31 +246,26 @@ export const InputBox = React.memo(
         return;
       }
 
+      log(`COMPLETION: @ mention "${atMentionPattern}"`);
+
       // Debounce search by 150ms to prevent lag
       setIsLoadingFiles(true);
       debounceTimerRef.current = setTimeout(async () => {
+        const searchStart = performance.now();
         try {
           // Use cached resources if available, otherwise fetch fresh
           let allResources = resourcesCache.current;
           if (!allResources) {
-            // Fetch both filesystem and MCP resources
-            const [filesystemResources, mcpResources] = await Promise.all([
-              listRepoFiles(process.cwd()).then(files =>
-                files.map(f => ({
-                  uri: f.uri,
-                  name: f.name,
-                  absolutePath: f.absolutePath,
-                }))
-              ).catch(() => []),
-              getMCPResources().then(resources =>
-                resources.map(r => ({
-                  uri: r.uri,
-                  name: r.name || r.uri.split('/').pop() || r.uri,
-                  absolutePath: r.uri.startsWith('file://') ? decodeURIComponent(r.uri.slice(7)) : r.uri,
-                }))
-              ).catch(() => []),
-            ]);
-            allResources = [...filesystemResources, ...mcpResources];
+            log('FILE_LOAD: loading files and MCP resources from worker process...');
+            // Fetch resources from worker process (keeps main thread unblocked)
+            try {
+              allResources = await loadResourcesFromWorker(process.cwd());
+              const loadDuration = performance.now() - searchStart;
+              logWithThreshold(`FILE_LOAD_COMPLETE: ${allResources.length} resources`, loadDuration, 50);
+            } catch (workerError) {
+              log(`FILE_LOAD_WORKER_ERROR: ${workerError instanceof Error ? workerError.message : 'unknown'}`);
+              allResources = [];
+            }
           }
 
           // Fuzzy filter resources by name
@@ -296,8 +285,11 @@ export const InputBox = React.memo(
               }).slice(0, 50); // Limit to 50 matches
 
           setFileSuggestions(filtered);
+          const filterDuration = performance.now() - searchStart;
+          log(`COMPLETION_FILTERED: ${filtered.length} matches in ${filterDuration.toFixed(2)}ms`);
         } catch (error) {
           console.error('[InputBox] Failed to search resources:', error);
+          log(`COMPLETION_ERROR: ${error instanceof Error ? error.message : 'unknown'}`);
           setFileSuggestions([]);
         }
         setIsLoadingFiles(false);

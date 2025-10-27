@@ -30,10 +30,16 @@ const nodeArgs = [
   ...process.argv.slice(2)       // Pass through all CLI arguments
 ];
 
+// Set NODE_ENV to development if DevTools is enabled (needed for profiling)
+const env = { ...process.env };
+if (process.env.DEV === 'true' || process.env.REACT_DEVTOOLS === 'true') {
+  env.NODE_ENV = 'development';
+}
+
 const child = spawn('node', nodeArgs, {
   stdio: 'inherit',              // Inherit stdin, stdout, stderr for transparent terminal interaction
   cwd: process.cwd(),            // Preserve current working directory
-  env: process.env               // Preserve environment variables (API keys, config, etc)
+  env: env                        // Pass environment variables with DevTools mode if enabled
 });
 
 // Handle spawn errors

@@ -13,6 +13,8 @@ type FileEditToolDiffProps = {
   old_string: string;
   verbose: boolean;
   width: number;
+  maxLinesPerDiff?: number; // Truncate diffs longer than this (default: 100)
+  collapsible?: boolean; // Allow collapsing diffs (default: false)
 };
 
 export function FileEditToolDiff({
@@ -21,17 +23,19 @@ export function FileEditToolDiff({
   old_string,
   verbose,
   width,
+  maxLinesPerDiff = 100,
+  collapsible = false,
 }: FileEditToolDiffProps): React.ReactNode {
   const fullFilePath = useMemo(
     () => (file_path.startsWith('/') ? file_path : resolve(getCwd(), file_path)),
     [file_path],
   );
-  
+
   const file = useMemo(
     () => (existsSync(fullFilePath) ? readFileSync(fullFilePath, 'utf8') : ''),
     [fullFilePath],
   );
-  
+
   const patch = useMemo(
     () =>
       getPatch({
@@ -43,6 +47,16 @@ export function FileEditToolDiff({
     [fullFilePath, file, old_string, new_string],
   );
 
+  // Calculate stats for display
+  const totalAdditions = patch.reduce(
+    (sum, hunk) => sum + hunk.lines.filter(l => l.startsWith('+')).length,
+    0
+  );
+  const totalDeletions = patch.reduce(
+    (sum, hunk) => sum + hunk.lines.filter(l => l.startsWith('-')).length,
+    0
+  );
+
   return (
     <Box flexDirection="column">
       <Box
@@ -52,17 +66,29 @@ export function FileEditToolDiff({
         paddingX={1}
       >
         <Box paddingBottom={1}>
-          <Text bold>
-            {verbose ? fullFilePath : relative(getCwd(), fullFilePath)}
-          </Text>
+          <Box>
+            <Text bold>
+              {verbose ? fullFilePath : relative(getCwd(), fullFilePath)}
+            </Text>
+          </Box>
+          <Box paddingLeft={1}>
+            <Text color="#9CA3AF">
+              {totalAdditions > 0 && <Text color="#10B981">+{totalAdditions}</Text>}
+              {totalAdditions > 0 && totalDeletions > 0 && <Text>{' '}</Text>}
+              {totalDeletions > 0 && <Text color="#EF4444">-{totalDeletions}</Text>}
+            </Text>
+          </Box>
         </Box>
         {patch.map((hunk, index) => (
-          <StructuredDiff
-            key={index}
-            patch={hunk}
-            dim={false}
-            width={width}
-          />
+          <Box key={index} marginBottom={1}>
+            <StructuredDiff
+              patch={hunk}
+              dim={false}
+              width={width}
+              maxLines={maxLinesPerDiff}
+              collapsible={collapsible}
+            />
+          </Box>
         ))}
       </Box>
     </Box>

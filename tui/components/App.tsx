@@ -4,6 +4,7 @@
  */
 
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import { useRenderLimit } from '../hooks/useRenderLimit.js';
 import { Box, Text, useInput, useApp } from 'ink';
 import { MessageList } from './MessageList.js';
 import { InputBox } from './InputBox.js';
@@ -50,6 +51,7 @@ import { getBackgroundAgent } from '../background-agent.js';
 import { loadHistory, savePrompt, PromptHistoryEntry } from '../prompt-history.js';
 import { filterToolsByMode, getModeToolDescription } from '../../utils/mode-tools.js';
 import { stripImageDataFromMessage } from '../message-utils.js';
+import { log, mark, measure, logMemory, logWithThreshold } from '../utils/diagnostics.js';
 
 type View = 'chat' | 'conversations' | 'agents' | 'config' | 'mcp' | 'models' | 'branches' | 'todos' | 'permissions';
 type AgentMode = 'PLAN' | 'ACT' | 'DEBUG';
@@ -95,6 +97,9 @@ export const App: React.FC<AppProps> = ({ initialConversationId, initialAgentId,
   const [historyIndex, setHistoryIndex] = useState<number | null>(null);
   const [tempInput, setTempInput] = useState('');
 
+  // Expanded/scrollable view state
+  const [isExpandedView, setIsExpandedView] = useState(false); // Ctrl+E: show all messages, disable input
+
   // OAuth state
   const [showOAuthDialog, setShowOAuthDialog] = useState(false);
   const [oauthProvider, setOAuthProvider] = useState<string>('');
@@ -107,7 +112,11 @@ export const App: React.FC<AppProps> = ({ initialConversationId, initialAgentId,
   const inputBoxRef = useRef<InputBoxHandle | null>(null);
   const inputValueRef = useRef('');
   const handleInputChange = useCallback((next: string) => {
+    const startTime = performance.now();
+    log(`APP_INPUT_CHANGE: len=${next.length}`, false); // No stack trace (high frequency)
     inputValueRef.current = next;
+    const duration = performance.now() - startTime;
+    log(`APP_INPUT_CHANGE_DONE: took ${duration.toFixed(2)}ms`, false); // No stack trace
   }, []);
 
 
@@ -115,6 +124,19 @@ export const App: React.FC<AppProps> = ({ initialConversationId, initialAgentId,
   const currentBranch = useMemo(() => {
     return conversation.branches.get(conversation.currentBranchId);
   }, [conversation.branches, conversation.currentBranchId]);
+
+  // Only render the most recent messages to prevent massive re-render overhead
+  // All messages are still stored in state, just not all displayed
+  // Use dynamic limit based on terminal height
+  const MAX_RENDERED_MESSAGES = useRenderLimit();
+  const renderedMessages = useMemo(() => {
+    const allMessages = currentBranch?.messages || [];
+    if (allMessages.length <= MAX_RENDERED_MESSAGES) {
+      return allMessages;
+    }
+    // Show last N messages (calculated from terminal height), rest are stored but not rendered
+    return allMessages.slice(-MAX_RENDERED_MESSAGES);
+  }, [currentBranch?.messages, MAX_RENDERED_MESSAGES]);
 
   // Calculate token metrics from current branch messages
   const tokenMetrics = useMemo(() => {
@@ -211,6 +233,14 @@ export const App: React.FC<AppProps> = ({ initialConversationId, initialAgentId,
 
     initClient();
   }, [agentId, agentMode]); // Re-initialize when mode changes
+
+  // Memory monitoring - log every 10 seconds
+  useEffect(() => {
+    const memInterval = setInterval(() => {
+      logMemory('periodic-check');
+    }, 10000); // Every 10 seconds
+    return () => clearInterval(memInterval);
+  }, []);
 
   // Load initial conversation if provided
   useEffect(() => {
@@ -444,6 +474,12 @@ export const App: React.FC<AppProps> = ({ initialConversationId, initialAgentId,
       return; // Prevent 'o' from being added to input
     }
 
+    // Ctrl+E to toggle expanded scrollable view (shows all messages, disables input)
+    if (key.ctrl && input === 'e') {
+      setIsExpandedView(!isExpandedView);
+      return; // Prevent 'e' from being added to input
+    }
+
     // Ctrl+T to toggle MCP manager (T = Tools/MCP Tools)
     if (key.ctrl && input === 't') {
       setView(view === 'mcp' ? 'chat' : 'mcp');
@@ -470,8 +506,15 @@ export const App: React.FC<AppProps> = ({ initialConversationId, initialAgentId,
 
     // Note: Ctrl+R is now handled in InputBox for inline fuzzy search
 
-    // Escape to exit navigation mode or stop agent execution
+    // Escape to exit expanded view, navigation mode, or stop agent execution
     if (key.escape) {
+      if (isExpandedView) {
+        // Exit expanded view
+        setIsExpandedView(false);
+        setError('Exited expanded view');
+        setTimeout(() => setError(null), 1500);
+        return;
+      }
       if (isHistoricalView) {
         // Exit navigation mode
         setNavigationIndex(null);
@@ -662,6 +705,7 @@ export const App: React.FC<AppProps> = ({ initialConversationId, initialAgentId,
           if (!branch) return prev;
 
           // Append all messages collected so far
+          // Messages are stored fully but only MAX_RENDERED_MESSAGES are displayed to prevent keystroke loss
           const updatedMessages = [...currentMessages, ...newMessages];
           const updatedBranch = { ...branch, messages: updatedMessages };
           const newBranches = new Map(prev.branches);
@@ -678,6 +722,10 @@ export const App: React.FC<AppProps> = ({ initialConversationId, initialAgentId,
       // Execute query with STATELESS SDK
       // Batch state updates to prevent cascading re-renders on every streaming chunk
       // This is critical for performance during long conversations
+      mark('stream-start');
+      log('STREAM: queryStream started');
+      let messageCount = 0;
+
       for await (const message of client.queryStream(currentMessages, messageContent, queryOptions)) {
         // Strip image data from message before storing to prevent memory issues
         // Images are sent to API but not kept in state (only metadata preserved)
@@ -685,6 +733,7 @@ export const App: React.FC<AppProps> = ({ initialConversationId, initialAgentId,
 
         // Add to collection
         newMessages.push(strippedMessage);
+        messageCount++;
 
         // Update state only when batching threshold is met to avoid cascading re-renders
         const now = Date.now();
@@ -692,14 +741,20 @@ export const App: React.FC<AppProps> = ({ initialConversationId, initialAgentId,
         const shouldUpdate = timeSinceLastUpdate >= UPDATE_DEBOUNCE_MS || newMessages.length >= UPDATE_BATCH_SIZE;
 
         if (shouldUpdate) {
+          log(`BATCH_UPDATE: ${newMessages.length} msgs after ${timeSinceLastUpdate}ms`);
           flushStateUpdate();
         }
       }
 
       // Final flush to ensure all messages are saved
       if (newMessages.length > 0) {
+        log(`STREAM_FINAL_FLUSH: ${newMessages.length} msgs`);
         flushStateUpdate();
       }
+
+      const streamDuration = measure('stream-complete', 'stream-start');
+      log(`STREAM_COMPLETE: ${messageCount} messages in ${streamDuration.toFixed(2)}ms`);
+      logMemory('after-stream');
 
       // Save updated conversation
       await saveConversation(conversation);
@@ -1128,23 +1183,32 @@ export const App: React.FC<AppProps> = ({ initialConversationId, initialAgentId,
                   <Text color={WHITE}>  Compress long conversations</Text>
                   <Text color={CYAN}>Ctrl+O</Text>
                   <Text color={WHITE}>  Toggle detailed/compact view</Text>
+                  <Text color={CYAN}>Ctrl+E</Text>
+                  <Text color={WHITE}>  Expanded view (all messages, scrollable, no input)</Text>
                   <Text color={CYAN}>Ctrl+R</Text>
                   <Text color={WHITE}>  Fuzzy find prompts (like fzf)</Text>
                   <Text color={CYAN}>↑/↓ Arrows</Text>
                   <Text color={WHITE}>  Navigate prompt history</Text>
                   <Text color={CYAN}>Escape</Text>
-                  <Text color={WHITE}>  Stop the AI mid-response</Text>
+                  <Text color={WHITE}>  Exit expanded/navigation view or stop the AI</Text>
                 </Box>
               </Box>
             )}
 
-            {/* Messages */}
+            {/* Messages - Different rendering based on mode */}
             <Box flexGrow={1} flexDirection="column" marginBottom={1}>
+              {isExpandedView && currentBranch && (
+                <Box paddingX={1} paddingY={0}>
+                  <Text color={CYAN} bold>📖 EXPANDED VIEW - All Messages (Press Ctrl+E or Escape to exit)</Text>
+                </Box>
+              )}
               <MessageList
                 messages={
-                  navigationIndex !== null && currentBranch
+                  isExpandedView && currentBranch
+                    ? currentBranch.messages // Show ALL messages in expanded view
+                    : navigationIndex !== null && currentBranch
                     ? currentBranch.messages.slice(0, navigationIndex + 1)
-                    : (currentBranch?.messages || [])
+                    : renderedMessages // Use renderedMessages (max 50) to prevent keystroke loss from large DOM
                 }
                 isStreaming={isStreaming}
                 verboseMode={verboseMode}
@@ -1237,18 +1301,20 @@ export const App: React.FC<AppProps> = ({ initialConversationId, initialAgentId,
             )}
 
             {/* Tooltip Hints - helpful tips that appear periodically */}
-            <TooltipHints enabled={true} intervalSeconds={45} />
+            {!isExpandedView && <TooltipHints enabled={true} intervalSeconds={45} />}
 
-            {/* Input Box */}
-            <InputBox
-              ref={inputBoxRef}
-              onSubmit={handleSubmit}
-              disabled={isStreaming}
-              modeColor={modeColor}
-              onChange={handleInputChange}
-              onNavigateHistory={handleHistoryNavigation}
-              promptHistory={promptHistory}
-            />
+            {/* Input Box - hidden in expanded view */}
+            {!isExpandedView && (
+              <InputBox
+                ref={inputBoxRef}
+                onSubmit={handleSubmit}
+                disabled={isStreaming}
+                modeColor={modeColor}
+                onChange={handleInputChange}
+                onNavigateHistory={handleHistoryNavigation}
+                promptHistory={promptHistory}
+              />
+            )}
           </>
         )}
 

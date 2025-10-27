@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Box, Text } from 'ink';
 import type { Hunk } from '../../utils/diff.js';
 import { getTheme, ThemeNames } from '../../utils/theme.js';
@@ -9,6 +9,9 @@ type StructuredDiffProps = {
   dim: boolean;
   width: number;
   overrideTheme?: ThemeNames;
+  maxLines?: number; // Truncate after this many lines (0 = no limit)
+  contextLines?: number; // Show this many context lines before/after changes (default: 3)
+  collapsible?: boolean; // Allow toggling expand/collapse
 };
 
 export function StructuredDiff({
@@ -16,12 +19,58 @@ export function StructuredDiff({
   dim,
   width,
   overrideTheme,
+  maxLines = 100, // Default: show up to 100 lines, then truncate
+  contextLines = 3,
+  collapsible = false,
 }: StructuredDiffProps): React.ReactNode {
-  const diffLines = useMemo(() => {
-    return formatDiff(patch.lines, patch.oldStart, width, dim, overrideTheme);
-  }, [patch.lines, patch.oldStart, width, dim, overrideTheme]);
+  const [isExpanded, setIsExpanded] = useState(!collapsible);
 
-  return diffLines.map((line, i) => <Box key={i}>{line}</Box>);
+  const diffLines = useMemo(() => {
+    return formatDiff(
+      patch.lines,
+      patch.oldStart,
+      width,
+      dim,
+      overrideTheme,
+      maxLines,
+      contextLines
+    );
+  }, [patch.lines, patch.oldStart, width, dim, overrideTheme, maxLines, contextLines]);
+
+  const truncated = maxLines > 0 && patch.lines.length > maxLines;
+
+  const theme = getTheme(overrideTheme);
+
+  if (collapsible && !isExpanded) {
+    const changeCount = patch.lines.filter(l => l.startsWith('+') || l.startsWith('-')).length;
+    return (
+      <Box>
+        <Text color={theme.text}>
+          ▶ {changeCount} changes ({patch.lines.length} total lines)
+        </Text>
+      </Box>
+    );
+  }
+
+  return (
+    <Box flexDirection="column">
+      {collapsible && isExpanded && (
+        <Box marginBottom={1}>
+          <Text color={theme.text}>▼ Diff (collapsed with Ctrl+E)</Text>
+        </Box>
+      )}
+      {diffLines.map((line, i) => (
+        <Box key={i}>{line}</Box>
+      ))}
+      {truncated && (
+        <Box marginTop={1}>
+          <Text color={theme.secondaryText} italic={true}>
+            ... diff truncated ({patch.lines.length} lines total) ...
+          </Text>
+        </Box>
+      )}
+    </Box>
+  );
 }
 
 function formatDiff(
@@ -30,11 +79,17 @@ function formatDiff(
   width: number,
   dim: boolean,
   overrideTheme?: ThemeNames,
+  maxLines: number = 100,
+  contextLines: number = 3,
 ): React.ReactNode[] {
   const theme = getTheme(overrideTheme);
 
+  // Apply line limit before processing
+  const linesToProcess =
+    maxLines > 0 && lines.length > maxLines ? lines.slice(0, maxLines) : lines;
+
   const ls = numberDiffLines(
-    lines.map(code => {
+    linesToProcess.map(code => {
       if (code.startsWith('+')) {
         return {
           code: ' ' + code.slice(1),
@@ -58,10 +113,10 @@ function formatDiff(
   return ls.flatMap(({ type, code, i }, index) => {
     // Simple word wrapping implementation
     const wrappedLines = wrapText(code, width - maxWidth - 3); // -3 for padding and line numbers
-    
+
     return wrappedLines.map((line, lineIndex) => {
       const key = `${type}-${i}-${lineIndex}-${index}`;
-      
+
       switch (type) {
         case 'add':
           return (

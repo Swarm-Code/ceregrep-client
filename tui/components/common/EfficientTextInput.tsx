@@ -20,6 +20,7 @@ import React from 'react';
 import { Text, useInput, type Key } from 'ink';
 import chalk from 'chalk';
 import { useTextInput } from '../../hooks/useTextInput.js';
+import { log } from '../../utils/diagnostics.js';
 
 export interface EfficientTextInputProps {
   /** Current value of the input */
@@ -82,15 +83,34 @@ export const EfficientTextInput: React.FC<EfficientTextInputProps> = ({
 
   // Wrap the onInput handler to support special key handling
   useInput((input, key) => {
-    if (!focus) return;
+    const startTime = performance.now();
+    const keyDesc = key.ctrl ? 'Ctrl+' : key.meta ? 'Meta+' : key.shift ? 'Shift+' : '';
+    const keyName = input === ' ' ? 'Space' : input === '\n' ? 'Enter' :
+                    key.upArrow ? 'Up' : key.downArrow ? 'Down' :
+                    key.leftArrow ? 'Left' : key.rightArrow ? 'Right' :
+                    key.tab ? 'Tab' : key.backspace ? 'Backspace' :
+                    key.delete ? 'Delete' : input;
+
+    log(`INK_INPUT: ${keyDesc}${keyName}`, false); // No stack trace (high frequency)
+
+    if (!focus) {
+      log(`INK_INPUT_IGNORED: not focused`, false);
+      return;
+    }
 
     // Check for special key combinations first
     if (onSpecialKey && onSpecialKey(input, key)) {
+      log(`INK_INPUT_SPECIAL_KEY: handled by parent`, false);
       return;
     }
 
     // Pass through to the hook's input handler
     handleInput(input, key);
+
+    const duration = performance.now() - startTime;
+    if (duration > 0.5) {
+      log(`INK_INPUT_SLOW: ${keyDesc}${keyName} took ${duration.toFixed(2)}ms`); // Slow events get stack trace
+    }
   }, { isActive: focus });
 
   // Render placeholder with cursor
