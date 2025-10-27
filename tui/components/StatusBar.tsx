@@ -49,6 +49,9 @@ export const StatusBar: React.FC<StatusBarProps> = ({
   const CYAN = '#22D3EE';
   const WHITE = '#FFFFFF';
   const DIM_WHITE = '#6B7280';
+  const YELLOW = '#F59E0B';
+  const ORANGE = '#F97316';
+  const RED = '#EF4444';
 
   // Format numbers with K/M suffix for compactness
   const formatCompact = (num: number): string => {
@@ -59,6 +62,36 @@ export const StatusBar: React.FC<StatusBarProps> = ({
 
   // Calculate context percentage
   const contextPct = tokenUsage ? ((tokenUsage.total / 131072) * 100).toFixed(0) : '0';
+
+  // Calculate heap memory usage
+  const getHeapInfo = () => {
+    try {
+      if (!process.memoryUsage) return null;
+      const mem = process.memoryUsage();
+      const heapUsedMB = Math.round(mem.heapUsed / 1024 / 1024);
+      const heapTotalMB = Math.round(mem.heapTotal / 1024 / 1024);
+      const heapPct = heapTotalMB > 0 ? ((heapUsedMB / heapTotalMB) * 100).toFixed(0) : '0';
+
+      return {
+        used: heapUsedMB,
+        total: heapTotalMB,
+        percentage: parseInt(heapPct),
+        percentageStr: heapPct,
+      };
+    } catch {
+      return null;
+    }
+  };
+
+  const heapInfo = getHeapInfo();
+
+  // Determine heap color based on usage percentage
+  const getHeapColor = () => {
+    if (!heapInfo) return DIM_WHITE;
+    if (heapInfo.percentage >= 85) return RED;      // Critical: 85%+
+    if (heapInfo.percentage >= 70) return ORANGE;   // Warning: 70-85%
+    return CYAN;                                     // Normal: <70%
+  };
 
   // Get mode description
   const getModeDesc = () => {
@@ -112,6 +145,15 @@ export const StatusBar: React.FC<StatusBarProps> = ({
             <>
               <Text color={DIM_WHITE}>  </Text>
               <Text color={CYAN}>●</Text>
+            </>
+          )}
+          {heapInfo && !showExitHint && (
+            <>
+              <Text color={DIM_WHITE}>  </Text>
+              <Text color={WHITE}>⚙</Text>
+              <Text color={getHeapColor()}>
+                {heapInfo.used}/{heapInfo.total}MB {heapInfo.percentage}%
+              </Text>
             </>
           )}
         </Box>

@@ -158,6 +158,28 @@ export const App: React.FC<AppProps> = ({ initialConversationId, initialAgentId,
     return () => clearInterval(checkOAuthFlag);
   }, []);
 
+  // Periodic garbage collection for long-running conversations
+  // Only runs if --expose-gc flag was passed to Node.js
+  useEffect(() => {
+    const globalWithGC = global as unknown as { gc?: () => void };
+
+    if (globalWithGC.gc && typeof globalWithGC.gc === 'function') {
+      // Trigger garbage collection every 5 minutes to help with memory in long conversations
+      // This helps clean up circular references and unreachable objects
+      const gcFunc = globalWithGC.gc;
+      const gcInterval = setInterval(() => {
+        try {
+          gcFunc();
+          // Silently clean - don't spam console
+        } catch (err) {
+          // gc() might fail in some environments, ignore
+        }
+      }, 5 * 60 * 1000); // 5 minutes
+
+      return () => clearInterval(gcInterval);
+    }
+  }, []);
+
   // Initialize or reinitialize client when agent OR mode changes
   useEffect(() => {
     const initClient = async () => {
@@ -629,19 +651,12 @@ export const App: React.FC<AppProps> = ({ initialConversationId, initialAgentId,
 
       // Collection for ALL new messages from this query
       const newMessages: Message[] = [];
+      let lastStateUpdateTime = Date.now();
+      const UPDATE_DEBOUNCE_MS = 300; // Batch updates every 300ms instead of on every chunk
+      const UPDATE_BATCH_SIZE = 3; // Or when 3+ messages accumulate
 
-      // Execute query with STATELESS SDK
-      // Show messages in REAL-TIME as they stream (users want to see progress!)
-      for await (const message of client.queryStream(currentMessages, messageContent, queryOptions)) {
-        // Strip image data from message before storing to prevent memory issues
-        // Images are sent to API but not kept in state (only metadata preserved)
-        const strippedMessage = stripImageDataFromMessage(message);
-
-        // Add to collection
-        newMessages.push(strippedMessage);
-
-        // Update state IN REAL-TIME so users can see messages as they arrive
-        // This is what makes the UI feel responsive!
+      // Helper to flush batched state updates
+      const flushStateUpdate = () => {
         setConversation(prev => {
           const branch = prev.branches.get(prev.currentBranchId);
           if (!branch) return prev;
@@ -657,6 +672,33 @@ export const App: React.FC<AppProps> = ({ initialConversationId, initialAgentId,
             branches: newBranches,
           };
         });
+        lastStateUpdateTime = Date.now();
+      };
+
+      // Execute query with STATELESS SDK
+      // Batch state updates to prevent cascading re-renders on every streaming chunk
+      // This is critical for performance during long conversations
+      for await (const message of client.queryStream(currentMessages, messageContent, queryOptions)) {
+        // Strip image data from message before storing to prevent memory issues
+        // Images are sent to API but not kept in state (only metadata preserved)
+        const strippedMessage = stripImageDataFromMessage(message);
+
+        // Add to collection
+        newMessages.push(strippedMessage);
+
+        // Update state only when batching threshold is met to avoid cascading re-renders
+        const now = Date.now();
+        const timeSinceLastUpdate = now - lastStateUpdateTime;
+        const shouldUpdate = timeSinceLastUpdate >= UPDATE_DEBOUNCE_MS || newMessages.length >= UPDATE_BATCH_SIZE;
+
+        if (shouldUpdate) {
+          flushStateUpdate();
+        }
+      }
+
+      // Final flush to ensure all messages are saved
+      if (newMessages.length > 0) {
+        flushStateUpdate();
       }
 
       // Save updated conversation
