@@ -1,0 +1,261 @@
+{
+  "request": {
+    "requestId": "6b86207c-0de3-4c69-bdf3-192163f38364",
+    "requestNumber": 157,
+    "timestamp": "2025-10-24T18:51:36.727Z",
+    "method": "POST",
+    "path": "/v1/chat/completions",
+    "headers": {
+      "content-length": "13655",
+      "accept": "application/json",
+      "content-type": "application/json",
+      "user-agent": "OpenAI/JS 4.104.0",
+      "x-stainless-lang": "js",
+      "x-stainless-package-version": "4.104.0",
+      "x-stainless-os": "Linux",
+      "x-stainless-arch": "x64",
+      "x-stainless-runtime": "node",
+      "x-stainless-runtime-version": "v24.9.0",
+      "authorization": "Bearer csk-f3e6y5t8ppf6h565dhpj3end2n82tdr95pp65m3xtx9vvnmc",
+      "x-stainless-retry-count": "0",
+      "x-stainless-timeout": "15",
+      "accept-encoding": "gzip,deflate",
+      "host": "localhost:8080",
+      "connection": "keep-alive"
+    },
+    "body": {
+      "model": "qwen-3-coder-480b",
+      "messages": [
+        {
+          "role": "system",
+          "content": "You are a helpful AI assistant with access to bash and file search tools.\n\nUse the tools available to help the user accomplish their tasks.\n\n\n\nCRITICAL INSTRUCTION - CONTEXT AND EXPLANATION REQUIREMENTS:\n\n- Give as much context as possible in your responses. It is ALWAYS better to add too much context than too little.\n\n- Use file references with line numbers in the format: filename.ts:123 or path/to/file.py:456\n\n- Explain everything in an ultra explanatory tone, assuming the user needs complete understanding.\n\n- Include specific details: function names, variable names, code snippets, file paths with line numbers.\n\n- When referencing code, ALWAYS include the file path and line number where it can be found.\n\n- Provide thorough explanations of how things work, why they work that way, and what each piece does.\n\n- Word for word: \"Better to add too much context than necessary\" - follow this principle strictly.\n\n\n\nCRITICAL INSTRUCTION - MUST USE TOOLS TO GATHER INFORMATION:\n\n- You MUST use grep to search for information before answering questions about code.\n\n- You CANNOT rely on stored context or prior knowledge about the codebase.\n\n- Everything must be read using tools before giving an explanation.\n\n- This is to ensure that you do not lazily answer questions without verifying current state.\n\n- Always grep for relevant files, read the actual code, and then provide your explanation.\n\n- Never answer based solely on assumptions or memory - always verify with tools first."
+        },
+        {
+          "role": "user",
+          "content": "Previous conversation context:\n\n- User asked: Analyze the complete architecture of the system → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash\n\n[Conversation compacted. Continuing from recent context:]"
+        },
+        {
+          "role": "assistant",
+          "tool_calls": [
+            {
+              "id": "85cb138cc",
+              "type": "function",
+              "function": {
+                "name": "Bash",
+                "arguments": "{\"command\":\"cat tools/grep.ts\"}"
+              }
+            }
+          ],
+          "content": "Let's look at the Grep tool implementation:"
+        },
+        {
+          "role": "tool",
+          "tool_call_id": "85cb138cc",
+          "content": "return timeComparison;                                                \n        })                                                                      \n        .map(([filePath]) => filePath);                                         \n                                                                                \n      const output: Output = {                                                  \n        filenames: matches,                                                     \n        durationMs: Date.now() - start,                                         \n        numFiles: matches.length,                                               \n      };                                                                        \n                                                                                \n      yield {                                                                   \n        type: 'result',                                                         \n        resultForAssistant: this.renderResultForAssistant!(output),             \n        data: output,                                                           \n      };                                                                        \n    } catch (error) {                                                           \n      yield {                                                                   \n        type: 'result',                                                         \n        resultForAssistant: `Error searching files: ${error instanceof Error ? e\nrror.message : String(error)}`,                                                 \n        data: {                                                                 \n          filenames: [],                                                        \n          durationMs: Date.now() - start,                                       \n          numFiles: 0,                                                          \n        },                                                                      \n      };                                                                        \n    }                                                                           \n  },                                                                            \n};"
+        },
+        {
+          "role": "assistant",
+          "tool_calls": [
+            {
+              "id": "300d8c108",
+              "type": "function",
+              "function": {
+                "name": "Bash",
+                "arguments": "{\"command\":\"cat core/tool.ts\"}"
+              }
+            }
+          ],
+          "content": "Let's examine the core tool implementation to understand the base structure:"
+        },
+        {
+          "role": "tool",
+          "tool_call_id": "300d8c108",
+          "content": ") => Promise<ToolResult>;                                                       \n                                                                                \n/**                                                                             \n * Options for creating a tool                                                  \n */                                                                             \nexport interface CreateToolOptions<T = Record<string, any>> {                   \n  name: string;                                                                 \n  description: string;                                                          \n  inputSchema: {                                                                \n    type: 'object';                                                             \n    properties: Record<string, any>;                                            \n    required?: string[];                                                        \n  };                                                                            \n  execute: ToolFunction<T>;                                                     \n}                                                                               \n                                                                                \n/**                                                                             \n * Helper function to create a tool with type safety                            \n */                                                                             \nexport function createTool<T = Record<string, any>>(                            \n  options: CreateToolOptions<T>                                                 \n): Tool {                                                                       \n  return {                                                                      \n    name: options.name,                                                         \n    description: options.description,                                           \n    input_schema: options.inputSchema,                                          \n    execute: options.execute as any,                                            \n  };                                                                            \n}"
+        },
+        {
+          "role": "assistant",
+          "tool_calls": [
+            {
+              "id": "a90de612b",
+              "type": "function",
+              "function": {
+                "name": "Bash",
+                "arguments": "{\"command\":\"cat llm/router.ts\"}"
+              }
+            }
+          ],
+          "content": "Let's look at the LLM router to understand how different models are handled:"
+        },
+        {
+          "role": "tool",
+          "tool_call_id": "a90de612b",
+          "content": "e;                                                                              \n  const ultrathinkMode = options.ultrathinkMode ?? config.ultrathinkMode ?? fals\ne;                                                                              \n                                                                                \n  // Route to appropriate provider                                              \n  switch (provider) {                                                           \n    case 'cerebras':                                                            \n      return await queryCerebras(messages, systemPrompt, maxThinkingTokens, tool\ns, abortSignal, {                                                               \n        ...options,                                                             \n        apiKey: options.apiKey || config.provider?.apiKey || config.apiKey,     \n        baseURL: config.provider?.baseURL,                                      \n        temperature: config.provider?.temperature,                              \n        top_p: config.provider?.top_p,                                          \n        model: options.model || config.model,                                   \n      });                                                                       \n                                                                                \n    case 'anthropic':                                                           \n    default:                                                                    \n      return await queryAnthropic(messages, systemPrompt, maxThinkingTokens, too\nls, abortSignal, {                                                              \n        ...options,                                                             \n        apiKey: options.apiKey || config.apiKey,                                \n        model: options.model || config.model,                                   \n        enableThinking,                                                         \n        ultrathinkMode,                                                         \n      });                                                                       \n  }                                                                             \n}"
+        },
+        {
+          "role": "assistant",
+          "tool_calls": [
+            {
+              "id": "d12bd7291",
+              "type": "function",
+              "function": {
+                "name": "Bash",
+                "arguments": "{\"command\":\"head -50 llm/providers/anthropic.ts\"}"
+              }
+            }
+          ],
+          "content": "Let's examine the Anthropic query implementation:"
+        },
+        {
+          "role": "tool",
+          "tool_call_id": "d12bd7291",
+          "content": "head: cannot open 'llm/providers/anthropic.ts' for reading: No such file or dire\nctory\nExit code 1"
+        },
+        {
+          "role": "assistant",
+          "tool_calls": [
+            {
+              "id": "e4036bf07",
+              "type": "function",
+              "function": {
+                "name": "Bash",
+                "arguments": "{\"command\":\"find . -name \\\"*anthropic*\\\" -type f\"}"
+              }
+            }
+          ],
+          "content": "Let's find the correct path for the Anthropic provider:"
+        },
+        {
+          "role": "tool",
+          "tool_call_id": "e4036bf07",
+          "content": "./llm/anthropic.ts                                                              \n./dist/llm/anthropic.js.map                                                     \n./dist/llm/anthropic.js                                                         \n./dist/llm/anthropic.d.ts.map                                                   \n./dist/llm/anthropic.d.ts"
+        }
+      ],
+      "temperature": 0.7,
+      "top_p": 0.8,
+      "tools": [
+        {
+          "type": "function",
+          "function": {
+            "name": "Bash",
+            "description": "Tool: Bash",
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "command": {
+                  "type": "string",
+                  "description": "The command to execute"
+                },
+                "timeout": {
+                  "type": "number",
+                  "description": "Optional timeout in milliseconds (max 600000)"
+                }
+              },
+              "required": [
+                "command"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        {
+          "type": "function",
+          "function": {
+            "name": "Grep",
+            "description": "Tool: Grep",
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "pattern": {
+                  "type": "string",
+                  "description": "The regular expression pattern to search for in file contents"
+                },
+                "path": {
+                  "type": "string",
+                  "description": "The directory to search in. Defaults to the current working directory."
+                },
+                "include": {
+                  "type": "string",
+                  "description": "File pattern to include in the search (e.g. \"*.ts\", \"*.{ts,tsx}\")"
+                }
+              },
+              "required": [
+                "pattern"
+              ],
+              "additionalProperties": false
+            }
+          }
+        }
+      ],
+      "tool_choice": "auto"
+    },
+    "bodySize": 13611
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "date": "Fri, 24 Oct 2025 18:51:37 GMT",
+      "content-type": "application/json",
+      "transfer-encoding": "chunked",
+      "connection": "keep-alive",
+      "server": "cloudflare",
+      "x-request-id": "993baaa2dff841bf-ATL",
+      "x-ratelimit-limit-requests-day": "172800",
+      "x-ratelimit-limit-tokens-minute": "1500000",
+      "x-ratelimit-remaining-requests-day": "170714",
+      "x-ratelimit-remaining-tokens-minute": "1372532",
+      "x-ratelimit-reset-requests-day": "18502.8089158535",
+      "x-ratelimit-reset-tokens-minute": "22.808915853500366",
+      "inference-id": "chatcmpl-5d6cacee-9642-4d02-85b9-f6e189ebdeb6",
+      "referrer-policy": "strict-origin-when-cross-origin",
+      "x-content-type-options": "nosniff",
+      "strict-transport-security": "max-age=3600; includeSubDomains",
+      "cf-cache-status": "DYNAMIC",
+      "set-cookie": "__cf_bm=.PfRZjfZA9YuHpxJMHneY9joq6Ym2I6vRbn8io3RPRQ-1761331896.7790227-1.0.1.1-euq7PCawvzt7oMMZerSGY6nsk7TcCqGjrvnqqzlXnY9k0IvdSozFPUNucdhtCIK4gy8Qcqm_fMEiDyWFaeJQTUkkDPCzBQel1MN90QTqVU7dw.cWrGWYmx1Si7thy0Z5; HttpOnly; Secure; Path=/; Expires=Fri, 24 Oct 2025 19:21:37 GMT",
+      "cf-ray": "993baaa2dff841bf-ATL",
+      "alt-svc": "h3=\":443\"; ma=86400"
+    },
+    "body": {
+      "id": "chatcmpl-5d6cacee-9642-4d02-85b9-f6e189ebdeb6",
+      "choices": [
+        {
+          "finish_reason": "tool_calls",
+          "index": 0,
+          "message": {
+            "content": "Let's examine the Anthropic implementation:\n\n",
+            "tool_calls": [
+              {
+                "id": "b50db6410",
+                "type": "function",
+                "function": {
+                  "name": "Bash",
+                  "arguments": "{\"command\": \"head -50 llm/anthropic.ts\"}"
+                }
+              }
+            ],
+            "role": "assistant"
+          }
+        }
+      ],
+      "created": 1761331896,
+      "model": "qwen-3-coder-480b",
+      "system_fingerprint": "fp_386b539e7b02ce3613b7",
+      "object": "chat.completion",
+      "usage": {
+        "prompt_tokens": 1902,
+        "completion_tokens": 39,
+        "total_tokens": 1941,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        }
+      },
+      "time_info": {
+        "queue_time": 0.082593137,
+        "prompt_time": 0.075518164,
+        "completion_time": 0.128481678,
+        "total_time": 0.28926706314086914,
+        "created": 1761331896.8689728
+      }
+    },
+    "duration": 571
+  }
+}

@@ -7,7 +7,7 @@ from pathlib import Path
 # Add mcp-server directory to path
 sys.path.insert(0, str(Path(__file__).parent))
 
-from ceregrep_mcp.tools.agent_tools import agent_tool_generator
+from scout_mcp.tools.agent_tools import agent_tool_generator
 
 # Test agent discovery
 print("Testing agent discovery...")

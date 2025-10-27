@@ -1,0 +1,261 @@
+{
+  "request": {
+    "requestId": "666524e4-78b4-40b8-b3c3-6f705e2255cd",
+    "requestNumber": 185,
+    "timestamp": "2025-10-24T18:51:49.723Z",
+    "method": "POST",
+    "path": "/v1/chat/completions",
+    "headers": {
+      "content-length": "11453",
+      "accept": "application/json",
+      "content-type": "application/json",
+      "user-agent": "OpenAI/JS 4.104.0",
+      "x-stainless-lang": "js",
+      "x-stainless-package-version": "4.104.0",
+      "x-stainless-os": "Linux",
+      "x-stainless-arch": "x64",
+      "x-stainless-runtime": "node",
+      "x-stainless-runtime-version": "v24.9.0",
+      "authorization": "Bearer csk-f3e6y5t8ppf6h565dhpj3end2n82tdr95pp65m3xtx9vvnmc",
+      "x-stainless-retry-count": "0",
+      "x-stainless-timeout": "15",
+      "accept-encoding": "gzip,deflate",
+      "host": "localhost:8080",
+      "connection": "keep-alive"
+    },
+    "body": {
+      "model": "qwen-3-coder-480b",
+      "messages": [
+        {
+          "role": "system",
+          "content": "You are a helpful AI assistant with access to bash and file search tools.\n\nUse the tools available to help the user accomplish their tasks.\n\n\n\nCRITICAL INSTRUCTION - CONTEXT AND EXPLANATION REQUIREMENTS:\n\n- Give as much context as possible in your responses. It is ALWAYS better to add too much context than too little.\n\n- Use file references with line numbers in the format: filename.ts:123 or path/to/file.py:456\n\n- Explain everything in an ultra explanatory tone, assuming the user needs complete understanding.\n\n- Include specific details: function names, variable names, code snippets, file paths with line numbers.\n\n- When referencing code, ALWAYS include the file path and line number where it can be found.\n\n- Provide thorough explanations of how things work, why they work that way, and what each piece does.\n\n- Word for word: \"Better to add too much context than necessary\" - follow this principle strictly.\n\n\n\nCRITICAL INSTRUCTION - MUST USE TOOLS TO GATHER INFORMATION:\n\n- You MUST use grep to search for information before answering questions about code.\n\n- You CANNOT rely on stored context or prior knowledge about the codebase.\n\n- Everything must be read using tools before giving an explanation.\n\n- This is to ensure that you do not lazily answer questions without verifying current state.\n\n- Always grep for relevant files, read the actual code, and then provide your explanation.\n\n- Never answer based solely on assumptions or memory - always verify with tools first."
+        },
+        {
+          "role": "user",
+          "content": "Previous conversation context:\n\n- User asked: Analyze the complete architecture of the system → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Grep → Assistant used tools: Grep → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Grep → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Bash → Assistant used tools: Grep → Assistant used tools: Bash → Assistant used tools: Grep → Assistant used tools: Bash → Assistant used tools: Grep → Assistant used tools: Grep → Assistant used tools: Grep → Assistant used tools: Bash → Assistant used tools: Bash\n\n[Conversation compacted. Continuing from recent context:]"
+        },
+        {
+          "role": "assistant",
+          "tool_calls": [
+            {
+              "id": "58090fb82",
+              "type": "function",
+              "function": {
+                "name": "Bash",
+                "arguments": "{\"command\":\"sed -n '1,20p' core/messages.ts\"}"
+              }
+            }
+          ],
+          "content": "I see that ToolUseBlock is imported from the Anthropic SDK. Let's check if there's a local definition or if it's only imported:"
+        },
+        {
+          "role": "tool",
+          "tool_call_id": "58090fb82",
+          "content": "/**                                                                             \n * Message utilities for Ceregrep Agent Framework                               \n * Headless version - no UI/React dependencies                                  \n */                                                                             \n                                                                                \nimport { randomUUID, UUID } from 'crypto';                                      \nimport {                                                                        \n  Message as APIMessage,                                                        \n  MessageParam,                                                                 \n  ContentBlock,                                                                 \n  ContentBlockParam,                                                            \n  ToolResultBlockParam,                                                         \n  ToolUseBlock,                                                                 \n} from '@anthropic-ai/sdk/resources/index.mjs';                                 \nimport { last } from 'lodash-es';                                               \n                                                                                \nexport type { ToolUseBlock };                                                   \n                                                                                \nexport const INTERRUPT_MESSAGE = '[Request interrupted by user]';               \nexport const INTERRUPT_MESSAGE_FOR_TOOL_USE = '[Request interrupted by user for \ntool use]';"
+        },
+        {
+          "role": "assistant",
+          "tool_calls": [
+            {
+              "id": "a61e26eef",
+              "type": "function",
+              "function": {
+                "name": "Bash",
+                "arguments": "{\"command\":\"grep -A 10 -B 10 \\\"interface ToolUseBlock\\\\|type ToolUseBlock\\\" core/messages.ts\"}"
+              }
+            }
+          ],
+          "content": "Let's check if there's a local definition by looking at more of the file:"
+        },
+        {
+          "role": "tool",
+          "tool_call_id": "a61e26eef",
+          "content": "Exit code 1"
+        },
+        {
+          "role": "assistant",
+          "tool_calls": [
+            {
+              "id": "3eb647d0c",
+              "type": "function",
+              "function": {
+                "name": "Bash",
+                "arguments": "{\"command\":\"grep -A 5 -B 5 \\\"ToolUseBlock\\\" core/agent.ts\"}"
+              }
+            }
+          ],
+          "content": "Let's check the agent.ts file to see how ToolUseBlock is used:"
+        },
+        {
+          "role": "tool",
+          "tool_call_id": "3eb647d0c",
+          "content": "INTERRUPT_MESSAGE,                                                            \n  INTERRUPT_MESSAGE_FOR_TOOL_USE,                                               \n} from './messages.js';                                                         \nimport { countTokens, shouldCompact } from './tokens.js';                       \nimport { executePreToolUseHooks, executePostToolUseHooks } from './hooks.js';   \n--                                                                              \n  }                                                                             \n                                                                                \n  yield assistantMessage;                                                       \n                                                                                \n  // Extract tool use blocks                                                    \n  const toolUseMessages = extractToolUseBlocks(assistantMessage);               \n                                                                                \n  if (toolUseContext.options.debug) {                                           \n    console.log('[AGENT] Tool use blocks found:', toolUseMessages.length);      \n    toolUseMessages.forEach(tu => console.log('  -', tu.name));                 \n  }                                                                             \n--                                                                              \n                                                                                \n/**                                                                             \n * Execute tools serially (one at a time)                                       \n */                                                                             \nasync function* runToolsSerially(                                               \n  toolUseMessages: ToolUseBlock[],                                              \n  assistantMessage: AssistantMessage,                                           \n  canUseTool: CanUseToolFn,                                                     \n  toolUseContext: ToolContext,                                                  \n  shouldSkipPermissionCheck: boolean,                                           \n): AsyncGenerator<Message, void> {"
+        },
+        {
+          "role": "assistant",
+          "tool_calls": [
+            {
+              "id": "937bdefeb",
+              "type": "function",
+              "function": {
+                "name": "Bash",
+                "arguments": "{\"command\":\"grep -A 5 -B 5 \\\"ToolUseBlock\\\" core/hooks.ts\"}"
+              }
+            }
+          ],
+          "content": "Let's also check the hooks.ts file to see how ToolUseBlock is used there:"
+        },
+        {
+          "role": "tool",
+          "tool_call_id": "937bdefeb",
+          "content": "Exit code 1"
+        },
+        {
+          "role": "assistant",
+          "tool_calls": [
+            {
+              "id": "cc40320fe",
+              "type": "function",
+              "function": {
+                "name": "Bash",
+                "arguments": "{\"command\":\"grep -A 5 -B 5 \\\"ToolUseBlock\\\" core/tools.ts\"}"
+              }
+            }
+          ],
+          "content": "Let's check the tools.ts file:"
+        },
+        {
+          "role": "tool",
+          "tool_call_id": "cc40320fe",
+          "content": "grep: core/tools.ts: No such file or directory\nExit code 2"
+        }
+      ],
+      "temperature": 0.7,
+      "top_p": 0.8,
+      "tools": [
+        {
+          "type": "function",
+          "function": {
+            "name": "Bash",
+            "description": "Tool: Bash",
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "command": {
+                  "type": "string",
+                  "description": "The command to execute"
+                },
+                "timeout": {
+                  "type": "number",
+                  "description": "Optional timeout in milliseconds (max 600000)"
+                }
+              },
+              "required": [
+                "command"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        {
+          "type": "function",
+          "function": {
+            "name": "Grep",
+            "description": "Tool: Grep",
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "pattern": {
+                  "type": "string",
+                  "description": "The regular expression pattern to search for in file contents"
+                },
+                "path": {
+                  "type": "string",
+                  "description": "The directory to search in. Defaults to the current working directory."
+                },
+                "include": {
+                  "type": "string",
+                  "description": "File pattern to include in the search (e.g. \"*.ts\", \"*.{ts,tsx}\")"
+                }
+              },
+              "required": [
+                "pattern"
+              ],
+              "additionalProperties": false
+            }
+          }
+        }
+      ],
+      "tool_choice": "auto"
+    },
+    "bodySize": 11353
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "date": "Fri, 24 Oct 2025 18:51:49 GMT",
+      "content-type": "application/json",
+      "transfer-encoding": "chunked",
+      "connection": "keep-alive",
+      "server": "cloudflare",
+      "x-request-id": "993baaf41c6e41bf-ATL",
+      "x-ratelimit-limit-requests-day": "172800",
+      "x-ratelimit-limit-tokens-minute": "1500000",
+      "x-ratelimit-remaining-requests-day": "170686",
+      "x-ratelimit-remaining-tokens-minute": "1317041",
+      "x-ratelimit-reset-requests-day": "18490.04480099678",
+      "x-ratelimit-reset-tokens-minute": "10.044800996780396",
+      "inference-id": "chatcmpl-b07ae787-4bd5-4df3-8b94-29bc26ee9e57",
+      "referrer-policy": "strict-origin-when-cross-origin",
+      "x-content-type-options": "nosniff",
+      "strict-transport-security": "max-age=3600; includeSubDomains",
+      "cf-cache-status": "DYNAMIC",
+      "set-cookie": "__cf_bm=LxZ1pkjcu8nJg7mPLJpDzbpGaQmz1J_D1OR.DHzJu2I-1761331909.7734869-1.0.1.1-uVHjN8hxSYTi0T1CjWz_r_xXZvr0145CX13phKaFC5WqOuU15Nqy12hDZr7RF.QRXhkWwEI0L4LTWBgcxtuFCFeZ5Lsf8ama4EDHrxo538oZ_Rfu1thgEzEdU3A5OP17; HttpOnly; Secure; Path=/; Expires=Fri, 24 Oct 2025 19:21:49 GMT",
+      "cf-ray": "993baaf41c6e41bf-ATL",
+      "alt-svc": "h3=\":443\"; ma=86400"
+    },
+    "body": {
+      "id": "chatcmpl-b07ae787-4bd5-4df3-8b94-29bc26ee9e57",
+      "choices": [
+        {
+          "finish_reason": "tool_calls",
+          "index": 0,
+          "message": {
+            "content": "Let's check what files are available in the core directory:\n\n",
+            "tool_calls": [
+              {
+                "id": "a2bee1766",
+                "type": "function",
+                "function": {
+                  "name": "Bash",
+                  "arguments": "{\"command\": \"ls -la core/\"}"
+                }
+              }
+            ],
+            "role": "assistant"
+          }
+        }
+      ],
+      "created": 1761331907,
+      "model": "qwen-3-coder-480b",
+      "system_fingerprint": "fp_386b539e7b02ce3613b7",
+      "object": "chat.completion",
+      "usage": {
+        "prompt_tokens": 1872,
+        "completion_tokens": 37,
+        "total_tokens": 1909,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        }
+      },
+      "time_info": {
+        "queue_time": 0.00015886,
+        "prompt_time": 0.033699771,
+        "completion_time": 0.019806332,
+        "total_time": 0.05527472496032715,
+        "created": 1761331907.331227
+      }
+    },
+    "duration": 297
+  }
+}
