@@ -96,7 +96,7 @@
     "@types/diff": "^7.0.2",
     "@types/env-paths": "^1.0.2",
     "@types/glob": "^8.1.0",
-    "@types/lodash-es": "^4.17.12",
+    "@types/lodash": "^4.14.202",
     "@types/lru-cache": "^7.10.9",
     "@types/node": "^20.11.0",
     "ink-testing-library": "^4.0.0",
