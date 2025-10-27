@@ -30,7 +30,9 @@ const MAX_WIDTH = 2000;
 const MAX_HEIGHT = 2000;
 const MAX_IMAGE_SIZE = 3.75 * 1024 * 1024; // 5MB in bytes, with base64 encoding
 
-const DESCRIPTION = `Read a file from the local filesystem. The file_path parameter must be an absolute path, not a relative path. By default, it reads up to ${MAX_LINES_TO_READ} lines starting from the beginning of the file. You can optionally specify a line offset and limit (especially handy for long files), but it's recommended to read the whole file by not providing these parameters. Any lines longer than ${MAX_LINE_LENGTH} characters will be truncated. For image files, the tool will display the image for you.`;
+const DESCRIPTION = `Read a file from the local filesystem. The file_path parameter must be an absolute path, not a relative path. By default, it reads up to ${MAX_LINES_TO_READ} lines starting from the beginning of the file. You can optionally specify a line offset and limit (especially handy for long files), but it's recommended to read the whole file by not providing these parameters. Any lines longer than ${MAX_LINE_LENGTH} characters will be truncated. 
+
+For image files (png, jpg, jpeg, gif, webp, bmp), this tool returns the actual image content that you can VIEW and ANALYZE using your vision capabilities. After reading an image file, you will be able to see the image and describe what's in it.`;
 
 const inputSchema = z.strictObject({
   file_path: z.string().describe('The absolute path to the file to read'),
@@ -400,7 +402,12 @@ export const FileReadTool = {
   renderResultForAssistant(data: Output) {
     switch (data.type) {
       case 'image':
+        // Return both the image block AND helpful text
         return [
+          {
+            type: 'text',
+            text: `[Image file loaded successfully. You can now see and analyze this ${data.file.type} image using your vision capabilities. Please describe what you see in the image.]`,
+          },
           {
             type: 'image',
             source: {
@@ -412,6 +419,25 @@ export const FileReadTool = {
         ];
       case 'text':
         return addLineNumbers(data.file);
+    }
+  },
+  renderToolResultMessage(data: Output, options?: { verbose?: boolean }) {
+    // Special rendering for TUI to avoid showing base64 spam
+    switch (data.type) {
+      case 'image': {
+        const sizeKB = Math.ceil(data.file.base64.length * 0.75 / 1024);
+        return `Image loaded (${sizeKB} KB, ${data.file.type})`;
+      }
+      case 'text': {
+        if (options?.verbose) {
+          return addLineNumbers(data.file);
+        }
+        // In compact mode, show summary
+        const lines = data.file.content.split('\n');
+        const preview = lines.slice(0, 3).join('\n');
+        const remaining = Math.max(0, data.file.totalLines - 3);
+        return remaining > 0 ? `${preview}\n… +${remaining} lines` : preview;
+      }
     }
   },
 } as Tool;

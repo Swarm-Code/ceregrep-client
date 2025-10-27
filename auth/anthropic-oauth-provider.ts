@@ -410,11 +410,11 @@ ${authUrl}`,
         currentToken.refresh_token.length < 1000
       ) {
         try {
-          // @pseudocode lines 84-86: Refresh the token with immediate timeout for testing
+          // @pseudocode lines 84-86: Refresh the token with 30 second timeout
           const refreshedToken = await Promise.race([
             this.deviceFlow.refreshToken(currentToken.refresh_token),
             new Promise<never>((_, reject) =>
-              setTimeout(() => reject(new Error('Refresh timeout')), 1),
+              setTimeout(() => reject(new Error('Refresh timeout')), 30000),
             ),
           ]);
 

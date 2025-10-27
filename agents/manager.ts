@@ -32,14 +32,14 @@ export interface AgentWithScope {
  * Get global agents directory path
  */
 export function getGlobalAgentsDir(): string {
-  return join(homedir(), '.ceregrep', 'agents');
+  return join(homedir(), '.swarmrc', 'agents');
 }
 
 /**
  * Get project agents directory path
  */
 export function getProjectAgentsDir(cwd: string = process.cwd()): string {
-  return join(cwd, '.ceregrep', 'agents');
+  return join(cwd, '.swarmrc', 'agents');
 }
 
 /**

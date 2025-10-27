@@ -35,13 +35,13 @@ export interface TokenStore {
 
 /**
  * Implementation of multi-provider token storage
- * Stores tokens securely in ~/.ceregrep/oauth/ directory
+ * Stores tokens securely in ~/.swarmrc/oauth/ directory
  */
 export class MultiProviderTokenStore implements TokenStore {
   private readonly basePath: string;
 
   constructor() {
-    this.basePath = join(homedir(), '.ceregrep', 'oauth');
+    this.basePath = join(homedir(), '.swarmrc', 'oauth');
   }
 
   /**
@@ -164,8 +164,8 @@ export class MultiProviderTokenStore implements TokenStore {
       if (process.platform !== 'win32') {
         await fs.chmod(this.basePath, 0o700);
 
-        // Also ensure parent .ceregrep directory has secure permissions
-        const parentDir = join(homedir(), '.ceregrep');
+        // Also ensure parent .swarmrc directory has secure permissions
+        const parentDir = join(homedir(), '.swarmrc');
         await fs.chmod(parentDir, 0o700);
       }
     } catch (error) {

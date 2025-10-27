@@ -44,7 +44,7 @@ export interface ValidationResult {
  */
 export function getTodosDir(): string {
   const homeDir = os.homedir();
-  return path.join(homeDir, '.ceregrep', 'todos');
+  return path.join(homeDir, '.swarmrc', 'todos');
 }
 
 /**

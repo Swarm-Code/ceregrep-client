@@ -69,9 +69,16 @@ export async function querySonnet(
     ultrathinkMode?: boolean;
   },
 ): Promise<AssistantMessage> {
+  // Check for API key or OAuth token
   const apiKey = options.apiKey || process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
-    throw new Error('ANTHROPIC_API_KEY environment variable is not set');
+    throw new Error(
+      'Anthropic authentication not configured.\n' +
+      'Please either:\n' +
+      '  1. Authenticate with OAuth: Run /model and select a Claude model\n' +
+      '  2. Set ANTHROPIC_API_KEY environment variable\n' +
+      '  3. Configure apiKey in your .swarmrc/providers/anthropic.json'
+    );
   }
 
   // Detect OAuth token (starts with 'sk-ant-oat') and create appropriate client
@@ -98,6 +105,26 @@ export async function querySonnet(
     content: msg.message.content,
   })) as Anthropic.MessageParam[];
 
+  // Debug: Log image content in tool_result messages
+  if (process.env.DEBUG_IMAGES) {
+    apiMessages.forEach((msg, idx) => {
+      if (Array.isArray(msg.content)) {
+        const toolResults = msg.content.filter((block: any) => block.type === 'tool_result');
+        toolResults.forEach((tr: any) => {
+          if (Array.isArray(tr.content)) {
+            const images = tr.content.filter((c: any) => c.type === 'image');
+            if (images.length > 0) {
+              console.log(`[DEBUG_IMAGES] Message ${idx} has ${images.length} image(s) in tool_result`);
+              images.forEach((img: any, imgIdx: number) => {
+                console.log(`[DEBUG_IMAGES]   Image ${imgIdx}: type=${img.source?.type}, media_type=${img.source?.media_type}, data_length=${img.source?.data?.length}`);
+              });
+            }
+          }
+        });
+      }
+    });
+  }
+
   // Validate that all messages have valid content
   // The Anthropic API requires non-empty content
   for (let i = 0; i < apiMessages.length; i++) {
@@ -120,6 +147,31 @@ export async function querySonnet(
   const startTime = Date.now();
 
   try {
+    // Debug: Log the last few messages if debugging images
+    if (process.env.DEBUG_IMAGES) {
+      console.log(`[DEBUG_IMAGES] Sending ${apiMessages.length} messages to Anthropic API`);
+      const lastMessages = apiMessages.slice(-3);
+      lastMessages.forEach((msg, idx) => {
+        console.log(`[DEBUG_IMAGES] Message ${apiMessages.length - 3 + idx} (${msg.role}):`);
+        if (Array.isArray(msg.content)) {
+          msg.content.forEach((block: any, blockIdx: number) => {
+            if (block.type === 'tool_result') {
+              console.log(`[DEBUG_IMAGES]   Block ${blockIdx}: tool_result, content is array: ${Array.isArray(block.content)}`);
+              if (Array.isArray(block.content)) {
+                block.content.forEach((c: any, cidx: number) => {
+                  console.log(`[DEBUG_IMAGES]     Content ${cidx}: type=${c.type}`);
+                });
+              }
+            } else {
+              console.log(`[DEBUG_IMAGES]   Block ${blockIdx}: ${block.type}`);
+            }
+          });
+        } else {
+          console.log(`[DEBUG_IMAGES]   String content (length: ${msg.content?.length || 0})`);
+        }
+      });
+    }
+
     // Build request parameters
     const requestParams: any = {
       model,

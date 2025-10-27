@@ -398,8 +398,17 @@ async function executeToolSafely(
       ? tool.renderResultForAssistant(lastResult.data)
       : lastResult.resultForAssistant || JSON.stringify(lastResult.data);
 
-    const finalContent = typeof resultContent === 'string' ? resultContent : JSON.stringify(resultContent);
-    const safeContent = finalContent.trim() || 'Tool executed successfully (no output)';
+    // Handle both string content and array content (for multimodal responses like images)
+    let safeContent: string | any[];
+    if (typeof resultContent === 'string') {
+      safeContent = resultContent.trim() || 'Tool executed successfully (no output)';
+    } else if (Array.isArray(resultContent)) {
+      // Content is an array (e.g., image blocks, mixed content)
+      safeContent = resultContent;
+    } else {
+      // Fallback: stringify objects
+      safeContent = JSON.stringify(resultContent);
+    }
 
     return createUserMessage([
       {
@@ -549,9 +558,18 @@ async function* runToolsSerially(
         ? tool.renderResultForAssistant(lastResult.data)
         : lastResult.resultForAssistant || JSON.stringify(lastResult.data);
 
+      // Handle both string content and array content (for multimodal responses like images)
       // CRITICAL: Ensure content is never empty/null - causes 400 errors with Cerebras
-      const finalContent = typeof resultContent === 'string' ? resultContent : JSON.stringify(resultContent);
-      const safeContent = finalContent.trim() || 'Tool executed successfully (no output)';
+      let safeContent: string | any[];
+      if (typeof resultContent === 'string') {
+        safeContent = resultContent.trim() || 'Tool executed successfully (no output)';
+      } else if (Array.isArray(resultContent)) {
+        // Content is an array (e.g., image blocks, mixed content)
+        safeContent = resultContent;
+      } else {
+        // Fallback: stringify objects
+        safeContent = JSON.stringify(resultContent);
+      }
 
       yield createUserMessage(
         [

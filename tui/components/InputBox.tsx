@@ -14,7 +14,8 @@ import React, {
 } from 'react';
 import { Box, Text, useInput } from 'ink';
 import { EfficientTextInput } from './common/EfficientTextInput.js';
-import { getMCPResources, readMCPResource } from '../../mcp/client.js';
+import { listRepoFiles, FileResource } from '../../mcp/resources.js';
+import { getMCPResources } from '../../mcp/client.js';
 import { PromptHistoryEntry } from '../prompt-history.js';
 import {
   readClipboardContent,
@@ -91,7 +92,7 @@ export const InputBox = React.memo(
     const [selectedIndex, setSelectedIndex] = useState(0);
     const [attachedFiles, setAttachedFiles] = useState<string[]>([]);
     const [attachedImages, setAttachedImages] = useState<ImageAttachment[]>([]);
-    const [fileSuggestions, setFileSuggestions] = useState<Array<{ uri: string; name: string; serverName: string }>>([]);
+    const [fileSuggestions, setFileSuggestions] = useState<Array<{ uri: string; name: string; absolutePath: string }>>([]);
     const [isLoadingFiles, setIsLoadingFiles] = useState(false);
     const [isSearchMode, setIsSearchMode] = useState(false);
     const [preSearchValue, setPreSearchValue] = useState('');
@@ -206,22 +207,35 @@ export const InputBox = React.memo(
 
     // PERFORMANCE: Debounce file search to avoid searching on every keystroke
     const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
-    const mcpResourcesCache = useRef<Array<{ uri: string; name: string; serverName: string }> | null>(null);
+    const resourcesCache = useRef<Array<{ uri: string; name: string; absolutePath: string }> | null>(null);
 
     useEffect(() => {
-      if (mcpResourcesCache.current) {
+      if (resourcesCache.current) {
         return;
       }
 
-      // Warm cache for MCP resources to avoid blocking UI on first @-mention
-      getMCPResources().then(resources => {
-        mcpResourcesCache.current = resources.map(r => ({
-          uri: r.uri,
-          name: r.name || r.uri.split('/').pop() || r.uri,
-          serverName: r.serverName,
-        }));
-      }).catch(() => {
-        // Ignore errors - we'll try again on-demand
+      // Warm cache: combine hardcoded filesystem + optional MCP resources
+      Promise.all([
+        // 1. ALWAYS get local filesystem files (hardcoded)
+        listRepoFiles(process.cwd()).then(files =>
+          files.map(f => ({
+            uri: f.uri,
+            name: f.name,
+            absolutePath: f.absolutePath,
+          }))
+        ).catch(() => []),
+
+        // 2. OPTIONALLY get MCP resources (if configured)
+        getMCPResources().then(resources =>
+          resources.map(r => ({
+            uri: r.uri,
+            name: r.name || r.uri.split('/').pop() || r.uri,
+            absolutePath: r.uri.startsWith('file://') ? decodeURIComponent(r.uri.slice(7)) : r.uri,
+          }))
+        ).catch(() => []),
+      ]).then(([filesystemResources, mcpResources]) => {
+        // Combine both sources (filesystem is always present, MCP is optional)
+        resourcesCache.current = [...filesystemResources, ...mcpResources];
       });
     }, []);
 
@@ -243,14 +257,26 @@ export const InputBox = React.memo(
       debounceTimerRef.current = setTimeout(async () => {
         try {
           // Use cached resources if available, otherwise fetch fresh
-          let allResources = mcpResourcesCache.current;
+          let allResources = resourcesCache.current;
           if (!allResources) {
-            const resources = await getMCPResources();
-            allResources = resources.map(r => ({
-              uri: r.uri,
-              name: r.name || r.uri.split('/').pop() || r.uri,
-              serverName: r.serverName,
-            }));
+            // Fetch both filesystem and MCP resources
+            const [filesystemResources, mcpResources] = await Promise.all([
+              listRepoFiles(process.cwd()).then(files =>
+                files.map(f => ({
+                  uri: f.uri,
+                  name: f.name,
+                  absolutePath: f.absolutePath,
+                }))
+              ).catch(() => []),
+              getMCPResources().then(resources =>
+                resources.map(r => ({
+                  uri: r.uri,
+                  name: r.name || r.uri.split('/').pop() || r.uri,
+                  absolutePath: r.uri.startsWith('file://') ? decodeURIComponent(r.uri.slice(7)) : r.uri,
+                }))
+              ).catch(() => []),
+            ]);
+            allResources = [...filesystemResources, ...mcpResources];
           }
 
           // Fuzzy filter resources by name
@@ -271,7 +297,7 @@ export const InputBox = React.memo(
 
           setFileSuggestions(filtered);
         } catch (error) {
-          console.error('[InputBox] Failed to search MCP resources:', error);
+          console.error('[InputBox] Failed to search resources:', error);
           setFileSuggestions([]);
         }
         setIsLoadingFiles(false);
@@ -365,15 +391,11 @@ export const InputBox = React.memo(
           if (lastAtIndex !== -1) {
             const newValue = value.slice(0, lastAtIndex) + `@${selected.name} `;
             applyValue(newValue, newValue.length);
-            // Extract file path from URI (file:///path -> /path)
-            const filePath = selected.uri.startsWith('file://')
-              ? decodeURIComponent(selected.uri.slice(7))
-              : selected.uri;
             setAttachedFiles(prev => {
-              if (prev.includes(filePath)) {
+              if (prev.includes(selected.absolutePath)) {
                 return prev;
               }
-              return [...prev, filePath];
+              return [...prev, selected.absolutePath];
             });
             setFileSuggestions([]);
             setSelectedIndex(0);
@@ -590,11 +612,7 @@ export const InputBox = React.memo(
             const lastAtIndex = value.lastIndexOf('@');
             const newValue = value.slice(0, lastAtIndex) + `@${selected.name} `;
             applyValue(newValue, newValue.length);
-            // Extract file path from URI (file:///path -> /path)
-            const filePath = selected.uri.startsWith('file://')
-              ? decodeURIComponent(selected.uri.slice(7))
-              : selected.uri;
-            setAttachedFiles((prev) => [...prev, filePath]);
+            setAttachedFiles((prev) => [...prev, selected.absolutePath]);
             setFileSuggestions([]);
             setSelectedIndex(0);
           }

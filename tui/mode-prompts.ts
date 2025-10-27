@@ -3,7 +3,7 @@
  * Each mode has specific behavior and preferred model
  */
 
-export type AgentMode = 'SEARCH' | 'PLAN' | 'ACT' | 'DEBUG';
+export type AgentMode = 'SEARCH' | 'PLAN' | 'ACT' | 'DEBUG' | 'AUTO';
 
 /**
  * Mode configuration with model preferences
@@ -16,7 +16,7 @@ export interface ModeConfig {
   description: string;
 }
 
-export const MODE_CONFIGS: Record<AgentMode, ModeConfig> = {
+export const MODE_CONFIGS: Record<Exclude<AgentMode, 'AUTO'>, ModeConfig> = {
   SEARCH: {
     mode: 'SEARCH',
     preferredProvider: 'cerebras',
@@ -52,6 +52,11 @@ export function getBaseSystemPrompt(): string[] {
 }
 
 export function getModeSpecificPrompt(mode: AgentMode): string[] {
+  // AUTO mode has no prompt - it uses whatever the current mode is
+  if (mode === 'AUTO') {
+    return [];
+  }
+
   switch (mode) {
     case 'SEARCH':
       return [
@@ -167,6 +172,9 @@ export function getModeSystemPrompt(mode: AgentMode): string[] {
 }
 
 export function getModeDescription(mode: AgentMode): string {
+  if (mode === 'AUTO') {
+    return 'Autonomous mode - agent decides how to proceed';
+  }
   return MODE_CONFIGS[mode].description;
 }
 
@@ -180,9 +188,14 @@ export function getModeEmoji(mode: AgentMode): string {
       return '⚡';
     case 'DEBUG':
       return '🔍';
+    case 'AUTO':
+      return '🤖';
   }
 }
 
-export function getModeConfig(mode: AgentMode): ModeConfig {
+export function getModeConfig(mode: AgentMode): ModeConfig | undefined {
+  if (mode === 'AUTO') {
+    return undefined; // AUTO doesn't have a config, it uses the current mode
+  }
   return MODE_CONFIGS[mode];
 }

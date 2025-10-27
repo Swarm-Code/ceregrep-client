@@ -31,6 +31,10 @@ const COMPACT_MAX_LINES = 8;
 const VERBOSE_MAX_LINES = 50; // Even in verbose mode, cap at 50 lines
 const MAX_TEXT_LENGTH = 10000; // Max characters per text block
 
+// Performance: Limit visible messages in long conversations
+const MAX_VISIBLE_MESSAGES = 15; // Show last 15 messages max (aggressive for typing performance)
+const STATIC_MESSAGE_THRESHOLD = 10; // Use Static component for messages older than this
+
 // PERFORMANCE: Memoize component to prevent unnecessary re-renders
 export const MessageList = React.memo<MessageListProps>(({ messages, isStreaming, verboseMode, tools }) => {
   // PERFORMANCE: Memoize tool executions map
@@ -80,20 +84,28 @@ export const MessageList = React.memo<MessageListProps>(({ messages, isStreaming
   }, [messages]); // Memoize based on messages
 
   // Filter messages for display
-  const displayMessages = messages.filter(msg => {
-    if (msg.type === 'progress') return false;
-    if (msg.type === 'user') {
-      // Hide user messages that contain tool results
-      if (Array.isArray(msg.message.content)) {
-        const hasToolResult = msg.message.content.some(
-          (block: any) => block.type === 'tool_result'
-        );
-        if (hasToolResult) return false;
+  const displayMessages = useMemo(() => {
+    const filtered = messages.filter(msg => {
+      if (msg.type === 'progress') return false;
+      if (msg.type === 'user') {
+        // Hide user messages that contain tool results
+        if (Array.isArray(msg.message.content)) {
+          const hasToolResult = msg.message.content.some(
+            (block: any) => block.type === 'tool_result'
+          );
+          if (hasToolResult) return false;
+        }
+        return true;
       }
-      return true;
+      return msg.type === 'assistant';
+    });
+
+    // PERFORMANCE: Limit visible messages in long conversations
+    if (filtered.length > MAX_VISIBLE_MESSAGES) {
+      return filtered.slice(-MAX_VISIBLE_MESSAGES);
     }
-    return msg.type === 'assistant';
-  });
+    return filtered;
+  }, [messages]);
 
   // Check if there are any pending tool executions (tools in assistant messages without results yet)
   const pendingTools: Array<{name: string; id: string}> = [];
@@ -108,23 +120,94 @@ export const MessageList = React.memo<MessageListProps>(({ messages, isStreaming
     }
   });
 
+  // PERFORMANCE: Determine which messages should be static vs transient
+  // Messages with pending tool uses should be transient (can update)
+  // All other messages should be static (don't re-render)
+  const messagesJSX = useMemo(() => {
+    const pendingToolIDs = new Set(pendingTools.map(t => t.id));
+    
+    return displayMessages.map((message, index) => {
+      const isLastMessage = index === displayMessages.length - 1;
+      
+      // Determine if this message should render statically
+      let shouldBeStatic = true;
+      
+      // Last message and streaming messages should be transient
+      if (isLastMessage || isStreaming) {
+        shouldBeStatic = false;
+      }
+      
+      // Messages with pending tool uses should be transient
+      if (message.type === 'assistant') {
+        const toolBlocks = extractToolUseBlocks(message);
+        if (toolBlocks.some(block => pendingToolIDs.has(block.id))) {
+          shouldBeStatic = false;
+        }
+      }
+      
+      return {
+        message,
+        type: shouldBeStatic ? 'static' as const : 'transient' as const,
+        isLastMessage,
+      };
+    });
+  }, [displayMessages, isStreaming, pendingTools]);
+
+  const staticMessagesJSX = useMemo(() => 
+    messagesJSX.filter(m => m.type === 'static'),
+    [messagesJSX]
+  );
+
+  const transientMessagesJSX = useMemo(() => 
+    messagesJSX.filter(m => m.type === 'transient'),
+    [messagesJSX]
+  );
+
+  const hiddenMessageCount = messages.length - displayMessages.length;
+
   return (
     <Box flexDirection="column">
       {/* Debug info */}
       {verboseMode && (
         <Box marginBottom={1}>
           <Text color={DIM_WHITE} dimColor>
-            [Debug: {messages.length} total msgs, {displayMessages.length} displayed, streaming: {isStreaming ? 'yes' : 'no'}, pending tools: {pendingTools.length}]
+            [Debug: {messages.length} total msgs, {displayMessages.length} displayed, {staticMessagesJSX.length} static, {transientMessagesJSX.length} transient, streaming: {isStreaming ? 'yes' : 'no'}, pending tools: {pendingTools.length}]
           </Text>
         </Box>
       )}
 
-      {displayMessages.map((message, index) => (
+      {/* Show hidden message indicator */}
+      {hiddenMessageCount > 0 && (
+        <Box marginBottom={1}>
+          <Text color={DIM_WHITE} dimColor>
+            ... ({hiddenMessageCount} older messages hidden for performance)
+          </Text>
+        </Box>
+      )}
+
+      {/* Static messages - rendered once, don't re-render */}
+      {staticMessagesJSX.length > 0 && (
+        <Static items={staticMessagesJSX}>
+          {(item) => (
+            <MessageItemWithTools
+              key={item.message.uuid}
+              message={item.message}
+              verboseMode={verboseMode}
+              isLastMessage={item.isLastMessage}
+              toolExecutions={toolExecutions}
+              tools={tools}
+            />
+          )}
+        </Static>
+      )}
+
+      {/* Transient messages - can update on each render */}
+      {transientMessagesJSX.map((item) => (
         <MessageItemWithTools
-          key={index}
-          message={message}
+          key={item.message.uuid}
+          message={item.message}
           verboseMode={verboseMode}
-          isLastMessage={index === displayMessages.length - 1}
+          isLastMessage={item.isLastMessage}
           toolExecutions={toolExecutions}
           tools={tools}
         />
@@ -159,12 +242,85 @@ interface MessageItemProps {
   tools?: any[];
 }
 
-const MessageItemWithTools: React.FC<MessageItemProps> = ({ message, verboseMode, isLastMessage, toolExecutions, tools }) => {
+// PERFORMANCE: Memoize message item to prevent re-renders
+const MessageItemWithTools = React.memo<MessageItemProps>(({ message, verboseMode, isLastMessage, toolExecutions, tools }) => {
   // Render user message
   if (message.type === 'user') {
-    const content = typeof message.message.content === 'string'
-      ? message.message.content
-      : JSON.stringify(message.message.content);
+    const messageContent = message.message.content;
+    
+    // Handle array content (with images, documents, etc.)
+    if (Array.isArray(messageContent)) {
+      const textBlocks = messageContent.filter((c: any) => c.type === 'text');
+      const imageBlocks = messageContent.filter((c: any) => c.type === 'image');
+      const documentBlocks = messageContent.filter((c: any) => c.type === 'document');
+      
+      const textContent = textBlocks.map((b: any) => b.text).join('\n');
+      const maxLines = isLastMessage ? VERBOSE_MAX_LINES * 2 : (verboseMode ? VERBOSE_MAX_LINES : COMPACT_MAX_LINES);
+      const { text, truncated, charTruncated } = compactText(textContent, maxLines);
+
+      return (
+        <Box flexDirection="column" marginBottom={1} marginTop={1}>
+          <Box marginBottom={0}>
+            <Text bold color={BLUE}>▶ YOU</Text>
+          </Box>
+          <Box paddingLeft={2} flexDirection="column" marginTop={0}>
+            <Text color={WHITE}>{text || '(empty message)'}</Text>
+            {(truncated || charTruncated) && (
+              <Text color={DIM_WHITE} dimColor>
+                ... (Ctrl+O to expand)
+              </Text>
+            )}
+            
+            {/* Display image attachments */}
+            {imageBlocks.length > 0 && (
+              <Box marginTop={1} flexDirection="column">
+                <Text color={PURPLE}>📎 Images ({imageBlocks.length}):</Text>
+                {imageBlocks.map((img: any, idx: number) => {
+                  const source = img.source;
+                  let sizeKB = 0;
+
+                  // Check if image data was stripped (memory optimization)
+                  if (source.data && source.data.startsWith('[IMAGE_DATA_STRIPPED:')) {
+                    // Extract size from placeholder: [IMAGE_DATA_STRIPPED:123KB]
+                    const match = source.data.match(/\[IMAGE_DATA_STRIPPED:(\d+)KB\]/);
+                    sizeKB = match ? parseInt(match[1], 10) : 0;
+                  } else if (source.data) {
+                    sizeKB = Math.ceil(source.data.length * 0.75 / 1024);
+                  }
+
+                  return (
+                    <Box key={idx} paddingLeft={2}>
+                      <Text color={DIM_WHITE}>
+                        • Image {idx + 1} ({sizeKB} KB)
+                      </Text>
+                    </Box>
+                  );
+                })}
+              </Box>
+            )}
+            
+            {/* Display document attachments */}
+            {documentBlocks.length > 0 && (
+              <Box marginTop={1} flexDirection="column">
+                <Text color={CYAN}>📄 Documents ({documentBlocks.length}):</Text>
+                {documentBlocks.map((doc: any, idx: number) => (
+                  <Box key={idx} paddingLeft={2}>
+                    <Text color={DIM_WHITE}>
+                      • {doc.title || 'Untitled'}
+                    </Text>
+                  </Box>
+                ))}
+              </Box>
+            )}
+          </Box>
+        </Box>
+      );
+    }
+    
+    // Handle string content
+    const content = typeof messageContent === 'string'
+      ? messageContent
+      : JSON.stringify(messageContent);
 
     const maxLines = isLastMessage ? VERBOSE_MAX_LINES * 2 : (verboseMode ? VERBOSE_MAX_LINES : COMPACT_MAX_LINES);
     const { text, truncated, charTruncated } = compactText(content, maxLines);
@@ -250,7 +406,7 @@ const MessageItemWithTools: React.FC<MessageItemProps> = ({ message, verboseMode
   }
 
   return null;
-};
+}); // React.memo - end of MessageItemWithTools
 
 const compactText = (text: string, maxLines: number): { text: string; truncated: boolean; charTruncated: boolean } => {
   // First truncate by character length if needed

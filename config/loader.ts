@@ -14,8 +14,8 @@ import {
 } from './swarmrc-loader.js';
 import { getOAuthManager } from '../auth/oauth-manager-instance.js';
 
-const CONFIG_FILENAMES = ['.swarmrc', '.ceregrep.json'];
-const DEPRECATED_FILENAMES = ['.ceregrep.json'];
+const CONFIG_FILENAMES = ['.swarmrc'];
+const DEPRECATED_FILENAMES: string[] = [];
 
 /**
  * Load configuration from file or folder
@@ -54,13 +54,9 @@ function loadConfigFile(path: string): { config: Partial<Config>; filename: stri
  */
 function showDeprecationWarning(filename: string, isGlobal: boolean): void {
   const location = isGlobal ? 'home directory (~/)' : 'project directory';
-  const newFilename = '.swarmrc';
 
-  console.warn('\n⚠️  DEPRECATION WARNING: Using .ceregrep.json is deprecated.');
-  console.warn(`   Found in ${location}`);
-  console.warn(`   Please rename to ${newFilename} for the new configuration format.`);
-  console.warn('   Support for .ceregrep.json will be removed in a future version.\n');
-  console.warn(`   To migrate: mv ${filename} ${newFilename}\n`);
+  console.warn('\n⚠️  Old .swarmrc file detected. Please migrate to .swarmrc/ folder structure.');
+  console.warn(`   Run: swarm migrate-config\n`);
 }
 
 /**
@@ -157,16 +153,27 @@ export function getConfig(cwd: string = process.cwd()): Config {
               if (apiKey === 'oauth' && mainConfig.activeProvider === 'anthropic') {
                 // Load OAuth token synchronously from file
                 try {
-                  const tokenStorePath = join(homedir(), '.ceregrep', 'oauth', 'anthropic.json');
+                  const tokenStorePath = join(homedir(), '.swarmrc', 'oauth', 'anthropic.json');
                   if (existsSync(tokenStorePath)) {
                     const tokenData = JSON.parse(readFileSync(tokenStorePath, 'utf-8'));
+
+                    // Check if token is expired (with 30 second buffer)
+                    const now = Math.floor(Date.now() / 1000);
+                    const isExpired = tokenData.expiry && (tokenData.expiry - 30) <= now;
+
+                    if (isExpired) {
+                      console.warn('⚠️  OAuth token has expired. It will be refreshed automatically on first use.');
+                      console.warn('   If refresh fails, please re-authenticate with /model');
+                    }
+
                     apiKey = tokenData.access_token;
                   } else {
-                    console.warn('OAuth token file not found. Please authenticate with /model.');
+                    console.warn('⚠️  OAuth token not found. Please authenticate with /model and select a Claude model.');
                     apiKey = undefined;
                   }
                 } catch (error) {
-                  console.warn('Failed to load OAuth token:', error);
+                  console.warn('⚠️  Failed to load OAuth token:', error);
+                  console.warn('   Please re-authenticate with /model');
                   apiKey = undefined;
                 }
               }

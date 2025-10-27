@@ -154,6 +154,24 @@ export function hasGlobalOldSwarmRcFile(): boolean {
  */
 export async function ensureSwarmRcStructure(cwd?: string): Promise<void> {
   const swarmRcDir = getSwarmRcDir(cwd);
+  const currentDir = cwd || process.cwd();
+  const swarmRcFile = join(currentDir, '.swarmrc');
+
+  // If .swarmrc exists as a file (old format), rename it first
+  if (existsSync(swarmRcFile)) {
+    try {
+      const stats = statSync(swarmRcFile);
+      if (stats.isFile()) {
+        const backupPath = join(currentDir, '.swarmrc.backup');
+        await rename(swarmRcFile, backupPath);
+        console.warn(`\n⚠️  Renamed old .swarmrc file to .swarmrc.backup`);
+        console.warn(`   Project config will now be stored in .swarmrc/ folder\n`);
+      }
+    } catch (error) {
+      // Ignore stat errors - file might not be accessible
+    }
+  }
+
   const providersDir = join(swarmRcDir, 'providers');
   const agentsDir = join(swarmRcDir, 'agents');
 

@@ -518,6 +518,23 @@ export const ModelManager: React.FC<ModelManagerProps> = ({ onCancel, onProvider
         }
       }
     }
+
+    // Handle keyboard when no models exist in models view
+    if (view === 'models' && selectedProvider && providerConfig) {
+      const models = Object.entries(providerConfig.models);
+      if (models.length === 0) {
+        if (input.toLowerCase() === 'a') {
+          // Add new model
+          setEditingModelName(null);
+          setView('addModel');
+        } else if (key.escape) {
+          // Go back to provider list
+          setSelectedProvider(null);
+          setProviderConfig(null);
+          setView('list');
+        }
+      }
+    }
   });
 
   // Render provider list view
@@ -683,8 +700,15 @@ export const ModelManager: React.FC<ModelManagerProps> = ({ onCancel, onProvider
         )}
 
         {models.length === 0 ? (
-          <Box marginBottom={1}>
-            <Text color={YELLOW}>No models configured. Press 'A' to add a model.</Text>
+          <Box marginBottom={1} flexDirection="column">
+            <Box marginBottom={1} borderStyle="single" borderColor={YELLOW} paddingX={1} paddingY={1}>
+              <Text color={YELLOW}>⚠ No models configured for this provider</Text>
+            </Box>
+            <Box>
+              <Text color={WHITE}>Press </Text>
+              <Text color={CYAN} bold>A</Text>
+              <Text color={WHITE}> to add your first model</Text>
+            </Box>
           </Box>
         ) : (
           <>
@@ -760,8 +784,16 @@ export const ModelManager: React.FC<ModelManagerProps> = ({ onCancel, onProvider
         {/* Footer shortcuts */}
         <Box marginTop={1} borderStyle="single" borderColor={DIM_WHITE} paddingX={1}>
           <Text color={DIM_WHITE}>
-            <Text color={CYAN}>Enter</Text> Select/Edit • <Text color={CYAN}>A</Text> Add Model •
-            <Text color={CYAN}> D</Text> Delete • <Text color={CYAN}>Esc</Text> Back
+            {models.length === 0 ? (
+              <>
+                <Text color={CYAN}>A</Text> Add Model • <Text color={CYAN}>Esc</Text> Back
+              </>
+            ) : (
+              <>
+                <Text color={CYAN}>Enter</Text> Select/Edit • <Text color={CYAN}>A</Text> Add Model •
+                <Text color={CYAN}> D</Text> Delete • <Text color={CYAN}>Esc</Text> Back
+              </>
+            )}
           </Text>
         </Box>
 
