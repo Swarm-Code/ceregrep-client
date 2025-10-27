@@ -13,7 +13,7 @@ import React, {
   useImperativeHandle,
 } from 'react';
 import { Box, Text, useInput } from 'ink';
-import TextInput from 'ink-text-input';
+import { ControllableTextInput } from './common/ControllableTextInput.js';
 import { searchRepoFiles, FileResource, listRepoFiles } from '../../mcp/resources.js';
 import { PromptHistoryEntry } from '../prompt-history.js';
 
@@ -36,18 +36,18 @@ export interface InputBoxHandle {
 
 // Available commands
 const COMMANDS = [
-  { name: '/new', description: 'Create new conversation', usage: '/new [title]' },
-  { name: '/agent', description: 'Switch agent', usage: '/agent [id]' },
-  { name: '/model', description: 'Select AI provider', usage: '/model' },
-  { name: '/permissions', description: 'Enable/disable tools', usage: '/permissions' },
-  { name: '/checkpoint', description: 'Create checkpoint', usage: '/checkpoint [description]' },
-  { name: '/restore', description: 'Restore to checkpoint', usage: '/restore <checkpoint-id>' },
-  { name: '/list', description: 'Show conversations', usage: '/list' },
-  { name: '/mcp', description: 'Manage MCP servers and tools', usage: '/mcp' },
-  { name: '/compact', description: 'Summarize and compact conversation', usage: '/compact' },
-  { name: '/clear', description: 'Clear current conversation', usage: '/clear' },
-  { name: '/help', description: 'Toggle help', usage: '/help' },
-  { name: '/exit', description: 'Exit TUI', usage: '/exit' },
+  { name: '/new', description: 'Create new conversation', usage: '/new [title]', requiresArgs: true },
+  { name: '/agent', description: 'Switch agent', usage: '/agent [id]', requiresArgs: true },
+  { name: '/model', description: 'Select AI provider', usage: '/model', requiresArgs: false },
+  { name: '/permissions', description: 'Enable/disable tools', usage: '/permissions', requiresArgs: false },
+  { name: '/checkpoint', description: 'Create checkpoint', usage: '/checkpoint [description]', requiresArgs: true },
+  { name: '/restore', description: 'Restore to checkpoint', usage: '/restore <checkpoint-id>', requiresArgs: true },
+  { name: '/list', description: 'Show conversations', usage: '/list', requiresArgs: false },
+  { name: '/mcp', description: 'Manage MCP servers and tools', usage: '/mcp', requiresArgs: false },
+  { name: '/compact', description: 'Summarize and compact conversation', usage: '/compact', requiresArgs: false },
+  { name: '/clear', description: 'Clear current conversation', usage: '/clear', requiresArgs: false },
+  { name: '/help', description: 'Toggle help', usage: '/help', requiresArgs: false },
+  { name: '/exit', description: 'Exit TUI', usage: '/exit', requiresArgs: false },
 ];
 
 // Force exact colors (hex) to override terminal themes
@@ -76,6 +76,7 @@ export const InputBox = React.memo(
     const [isLoadingFiles, setIsLoadingFiles] = useState(false);
     const [isSearchMode, setIsSearchMode] = useState(false);
     const [preSearchValue, setPreSearchValue] = useState('');
+    const [cursorOverride, setCursorOverride] = useState<number | undefined>(undefined);
 
     const notifyChange = useCallback((next: string) => {
       if (externalOnChange) {
@@ -83,38 +84,41 @@ export const InputBox = React.memo(
       }
     }, [externalOnChange]);
 
-    const updateValue = useCallback((next: string) => {
+    const applyValue = useCallback((next: string, cursor?: number) => {
       setValue(next);
       notifyChange(next);
+      if (typeof cursor === 'number') {
+        setCursorOverride(Math.max(0, cursor));
+      } else {
+        setCursorOverride(undefined);
+      }
     }, [notifyChange]);
 
     // Keep internal state in sync when parent provides a controlled value
     useEffect(() => {
       if (externalValue !== undefined && externalValue !== value) {
         setValue(externalValue);
+        setCursorOverride(undefined);
       }
     }, [externalValue, value]);
 
+    useEffect(() => {
+      if (cursorOverride === undefined) return;
+      const timeout = setTimeout(() => {
+        setCursorOverride(undefined);
+      }, 0);
+      return () => clearTimeout(timeout);
+    }, [cursorOverride]);
+
     useImperativeHandle(ref, () => ({
       setValue: (next: string) => {
-        updateValue(next);
+        applyValue(next, next.length);
         setSelectedIndex(0);
         setFileSuggestions([]);
       },
       getValue: () => value,
       clearAttachments: () => setAttachedFiles([]),
-    }), [updateValue, value]);
-
-    // PERFORMANCE: Memoize submit handler
-    const handleSubmit = useCallback(() => {
-      if (value.trim() && !disabled) {
-        onSubmit(value, attachedFiles);
-        updateValue('');
-        setSelectedIndex(0);
-        setAttachedFiles([]);
-        setFileSuggestions([]);
-      }
-    }, [value, disabled, onSubmit, attachedFiles, updateValue]);
+    }), [applyValue, value]);
 
     // Get terminal width for line
     const width = process.stdout.columns || 80;
@@ -291,6 +295,87 @@ export const InputBox = React.memo(
 
     const showPromptSuggestions = isSearchMode && promptSuggestions.length > 0;
 
+    const handleSubmit = useCallback(() => {
+      if (isSearchMode) {
+        if (showPromptSuggestions && promptSuggestions.length > 0) {
+          const selected = promptSuggestions[selectedIndex];
+          if (selected) {
+            applyValue(selected.text, selected.text.length);
+          } else {
+            applyValue(preSearchValue, preSearchValue.length);
+          }
+        } else {
+          applyValue(preSearchValue, preSearchValue.length);
+        }
+        setIsSearchMode(false);
+        setSelectedIndex(0);
+        return;
+      }
+
+      if (showFileSuggestions) {
+        const selected = fileSuggestions[selectedIndex];
+        if (selected) {
+          const lastAtIndex = value.lastIndexOf('@');
+          if (lastAtIndex !== -1) {
+            const newValue = value.slice(0, lastAtIndex) + `@${selected.name} `;
+            applyValue(newValue, newValue.length);
+            setAttachedFiles(prev => {
+              if (prev.includes(selected.absolutePath)) {
+                return prev;
+              }
+              return [...prev, selected.absolutePath];
+            });
+            setFileSuggestions([]);
+            setSelectedIndex(0);
+          }
+        }
+        return;
+      }
+
+      if (showCommandSuggestions) {
+        const selected = commandSuggestions[selectedIndex];
+        if (selected) {
+          const requiresArgs = selected.requiresArgs ?? false;
+          const commandValue = requiresArgs ? `${selected.name} ` : selected.name;
+          applyValue(commandValue, commandValue.length);
+          setSelectedIndex(0);
+          setFileSuggestions([]);
+
+          if (!requiresArgs) {
+            const filesToSend = attachedFiles.length > 0 ? [...attachedFiles] : undefined;
+            setAttachedFiles([]);
+            onSubmit(selected.name, filesToSend);
+            applyValue('', 0);
+          }
+        }
+        return;
+      }
+
+      if (value.trim() && !disabled) {
+        onSubmit(value, attachedFiles);
+        applyValue('', 0);
+        setSelectedIndex(0);
+        setAttachedFiles([]);
+        setFileSuggestions([]);
+      }
+    }, [
+      isSearchMode,
+      showPromptSuggestions,
+      promptSuggestions,
+      selectedIndex,
+      applyValue,
+      preSearchValue,
+      showFileSuggestions,
+      fileSuggestions,
+      value,
+      setAttachedFiles,
+      showCommandSuggestions,
+      commandSuggestions,
+      disabled,
+      onSubmit,
+      attachedFiles,
+    ]);
+
     // Calculate scrolling window for suggestions
     const VISIBLE_ITEMS = 5;
     const getVisibleWindow = (selectedIdx: number, totalItems: number) => {
@@ -329,12 +414,12 @@ export const InputBox = React.memo(
           // Enter search mode
           setIsSearchMode(true);
           setPreSearchValue(value);
-          updateValue('');
+          applyValue('', 0);
           setSelectedIndex(0);
         } else {
           // Exit search mode without selecting
           setIsSearchMode(false);
-          updateValue(preSearchValue);
+          applyValue(preSearchValue, preSearchValue.length);
           setSelectedIndex(0);
         }
         return;
@@ -345,19 +430,8 @@ export const InputBox = React.memo(
         // Escape: exit search mode
         if (key.escape) {
           setIsSearchMode(false);
-          updateValue(preSearchValue);
+          applyValue(preSearchValue, preSearchValue.length);
           setSelectedIndex(0);
-          return;
-        }
-
-        // Enter: select prompt and exit search mode
-        if (key.return && promptSuggestions.length > 0) {
-          const selected = promptSuggestions[selectedIndex];
-          if (selected) {
-            updateValue(selected.text);
-            setIsSearchMode(false);
-            setSelectedIndex(0);
-          }
           return;
         }
 
@@ -387,8 +461,9 @@ export const InputBox = React.memo(
             // Replace @pattern with @filename and add to attached files
             const lastAtIndex = value.lastIndexOf('@');
             const newValue = value.slice(0, lastAtIndex) + `@${selected.name} `;
-            updateValue(newValue);
+            applyValue(newValue, newValue.length);
             setAttachedFiles((prev) => [...prev, selected.absolutePath]);
+            setFileSuggestions([]);
             setSelectedIndex(0);
           }
           return;
@@ -412,8 +487,19 @@ export const InputBox = React.memo(
         // Tab: autocomplete with selected command
         if (key.tab) {
           const selected = commandSuggestions[selectedIndex];
-          updateValue(selected.name + ' ');
-          setSelectedIndex(0);
+          if (selected) {
+            const requiresArgs = selected.requiresArgs ?? false;
+            const commandValue = requiresArgs ? `${selected.name} ` : selected.name;
+            applyValue(commandValue, commandValue.length);
+            setSelectedIndex(0);
+            setFileSuggestions([]);
+            if (!requiresArgs) {
+              const filesToSend = attachedFiles.length > 0 ? [...attachedFiles] : undefined;
+              setAttachedFiles([]);
+              onSubmit(selected.name, filesToSend);
+              applyValue('', 0);
+            }
+          }
           return;
         }
 
@@ -458,12 +544,13 @@ export const InputBox = React.memo(
         {/* Input area */}
         <Box paddingX={1}>
           <Text color={lineColor} bold>▶ </Text>
-          <TextInput
+          <ControllableTextInput
             value={value}
-            onChange={updateValue}
+            onChange={(next) => applyValue(next)}
             onSubmit={handleSubmit}
             placeholder={disabled ? 'Waiting...' : isSearchMode ? 'Search prompts (fzf)...' : 'Type a message or /help for commands...'}
             showCursor={!disabled}
+            cursorOverride={cursorOverride}
           />
         </Box>
 
