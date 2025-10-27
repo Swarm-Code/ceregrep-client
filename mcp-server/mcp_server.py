@@ -2,6 +2,7 @@
 """MCP server for ceregrep - exposes ceregrep query capabilities to other agents."""
 
 import asyncio
+import argparse
 import sys
 import signal
 import os
@@ -17,6 +18,35 @@ from tool_discovery import tool_discovery
 
 # Debug flag
 DEBUG_MCP = os.getenv("DEBUG_MCP", "").lower() in ("1", "true", "yes")
+
+# Parse CLI arguments early so tools can leverage configuration
+parser = argparse.ArgumentParser(add_help=False)
+parser.add_argument(
+    "--project-dir",
+    dest="project_dir",
+    help="Default project directory for scout tools (overrides per-call cwd)",
+)
+parsed_args, remaining_argv = parser.parse_known_args()
+DEFAULT_PROJECT_DIR: str | None = None
+
+if parsed_args.project_dir:
+    project_dir_path = Path(parsed_args.project_dir).expanduser()
+    if not project_dir_path.is_absolute():
+        project_dir_path = (Path.cwd() / project_dir_path).resolve()
+    else:
+        project_dir_path = project_dir_path.resolve()
+
+    if project_dir_path.exists():
+        DEFAULT_PROJECT_DIR = str(project_dir_path)
+        os.environ["SCOUT_DEFAULT_PROJECT_DIR"] = DEFAULT_PROJECT_DIR
+        if DEBUG_MCP:
+            print(f"[Scout MCP] Using default project dir: {DEFAULT_PROJECT_DIR}", file=sys.stderr, flush=True)
+    else:
+        if DEBUG_MCP:
+            print(f"[Scout MCP] Provided project dir does not exist: {project_dir_path}", file=sys.stderr, flush=True)
+
+# Restore remaining argv in case other systems inspect it later
+sys.argv = [sys.argv[0], *remaining_argv]
 
 # Import agent tools from scout_mcp package
 try:
