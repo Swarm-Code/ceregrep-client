@@ -17,6 +17,7 @@ interface MessageListProps {
   isStreaming: boolean;
   verboseMode: boolean;
   tools?: any[]; // Optional tools array for rendering tool results
+  isExpandedView?: boolean; // Skip message limit in expanded view mode
 }
 
 // Force exact colors (hex) to override terminal themes
@@ -36,7 +37,7 @@ const MAX_VISIBLE_MESSAGES = 15; // Show last 15 messages max (aggressive for ty
 const STATIC_MESSAGE_THRESHOLD = 10; // Use Static component for messages older than this
 
 // PERFORMANCE: Memoize component to prevent unnecessary re-renders
-export const MessageList = React.memo<MessageListProps>(({ messages, isStreaming, verboseMode, tools }) => {
+export const MessageList = React.memo<MessageListProps>(({ messages, isStreaming, verboseMode, tools, isExpandedView = false }) => {
   // PERFORMANCE: Memoize tool executions map
   const toolExecutions = useMemo(() => {
     const executions = new Map<string, { name: string; input: any; output: string | React.ReactNode; data?: any }>();
@@ -100,12 +101,12 @@ export const MessageList = React.memo<MessageListProps>(({ messages, isStreaming
       return msg.type === 'assistant';
     });
 
-    // PERFORMANCE: Limit visible messages in long conversations
-    if (filtered.length > MAX_VISIBLE_MESSAGES) {
+    // PERFORMANCE: Limit visible messages in long conversations (unless in expanded view)
+    if (!isExpandedView && filtered.length > MAX_VISIBLE_MESSAGES) {
       return filtered.slice(-MAX_VISIBLE_MESSAGES);
     }
     return filtered;
-  }, [messages]);
+  }, [messages, isExpandedView]);
 
   // Check if there are any pending tool executions (tools in assistant messages without results yet)
   const pendingTools: Array<{name: string; id: string}> = [];

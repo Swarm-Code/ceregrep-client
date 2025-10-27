@@ -1213,6 +1213,7 @@ export const App: React.FC<AppProps> = ({ initialConversationId, initialAgentId,
                 isStreaming={isStreaming}
                 verboseMode={verboseMode}
                 tools={tools}
+                isExpandedView={isExpandedView}
               />
             </Box>
 
