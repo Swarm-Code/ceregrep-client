@@ -6,8 +6,8 @@
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "bin": {
-    "scout": "./bin/scout.sh",
-    "swarm-scout": "./bin/scout.sh"
+    "scout": "./bin/index.js",
+    "swarm-scout": "./bin/index.js"
   },
   "exports": {
     ".": {
