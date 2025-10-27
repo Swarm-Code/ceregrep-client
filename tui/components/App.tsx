@@ -3,10 +3,11 @@
  * Claude Code replacement interface
  */
 
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { Box, Text, useInput, useApp } from 'ink';
 import { MessageList } from './MessageList.js';
 import { InputBox } from './InputBox.js';
+import type { InputBoxHandle } from './InputBox.js';
 import { StatusBar } from './StatusBar.js';
 import { Header } from './Header.js';
 import { ConversationList } from './ConversationList.js';
@@ -85,7 +86,6 @@ export const App: React.FC<AppProps> = ({ initialConversationId, initialAgentId,
   const [verboseMode, setVerboseMode] = useState(false);
   const [agentMode, setAgentMode] = useState<AgentMode>('PLAN');
   const [autoMode, setAutoMode] = useState(false);
-  const [inputValue, setInputValue] = useState('');
   const [showExitHint, setShowExitHint] = useState(false);
   const [navigationIndex, setNavigationIndex] = useState<number | null>(null); // null = live mode
   const [isHistoricalView, setIsHistoricalView] = useState(false);
@@ -102,6 +102,11 @@ export const App: React.FC<AppProps> = ({ initialConversationId, initialAgentId,
   const lastCtrlCPress = useRef<number>(0);
   const exitHintTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const [config, setConfig] = useState(() => getConfig());
+  const inputBoxRef = useRef<InputBoxHandle | null>(null);
+  const inputValueRef = useRef('');
+  const handleInputChange = useCallback((next: string) => {
+    inputValueRef.current = next;
+  }, []);
 
 
   // Get current branch
@@ -254,18 +259,20 @@ export const App: React.FC<AppProps> = ({ initialConversationId, initialAgentId,
   const handleHistoryNavigation = (direction: 'up' | 'down') => {
     if (promptHistory.length === 0) return;
 
+    const currentInput = inputValueRef.current;
+
     if (direction === 'up') {
       // Going back in history (older prompts)
       if (historyIndex === null) {
         // First navigation - save current input and go to most recent
-        setTempInput(inputValue);
+        setTempInput(currentInput);
         setHistoryIndex(0);
-        setInputValue(promptHistory[0].text);
+        inputBoxRef.current?.setValue(promptHistory[0].text);
       } else if (historyIndex < promptHistory.length - 1) {
         // Move to older prompt
         const newIndex = historyIndex + 1;
         setHistoryIndex(newIndex);
-        setInputValue(promptHistory[newIndex].text);
+        inputBoxRef.current?.setValue(promptHistory[newIndex].text);
       }
     } else {
       // Going forward in history (newer prompts)
@@ -274,11 +281,11 @@ export const App: React.FC<AppProps> = ({ initialConversationId, initialAgentId,
           // Move to newer prompt
           const newIndex = historyIndex - 1;
           setHistoryIndex(newIndex);
-          setInputValue(promptHistory[newIndex].text);
+          inputBoxRef.current?.setValue(promptHistory[newIndex].text);
         } else {
           // At newest - restore temp input
           setHistoryIndex(null);
-          setInputValue(tempInput);
+          inputBoxRef.current?.setValue(tempInput);
         }
       }
     }
@@ -296,7 +303,7 @@ export const App: React.FC<AppProps> = ({ initialConversationId, initialAgentId,
         exit();
       } else {
         // First press - clear input and show exit hint
-        setInputValue('');
+        inputBoxRef.current?.setValue('');
         setShowExitHint(true);
         lastCtrlCPress.current = now;
 
@@ -375,7 +382,7 @@ export const App: React.FC<AppProps> = ({ initialConversationId, initialAgentId,
     }
 
     // Tab to cycle modes (only when NOT typing a command)
-    if (key.tab && !isStreaming && !inputValue.startsWith('/')) {
+    if (key.tab && !isStreaming && !inputValueRef.current.startsWith('/')) {
       cycleMode();
       return;
     }
@@ -1133,11 +1140,11 @@ export const App: React.FC<AppProps> = ({ initialConversationId, initialAgentId,
 
             {/* Input Box */}
             <InputBox
+              ref={inputBoxRef}
               onSubmit={handleSubmit}
               disabled={isStreaming}
               modeColor={getModeInfo(agentMode).color}
-              value={inputValue}
-              onChange={setInputValue}
+              onChange={handleInputChange}
               onNavigateHistory={handleHistoryNavigation}
               promptHistory={promptHistory}
             />
