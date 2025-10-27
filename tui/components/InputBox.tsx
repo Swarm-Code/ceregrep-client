@@ -13,12 +13,20 @@ import React, {
   useImperativeHandle,
 } from 'react';
 import { Box, Text, useInput } from 'ink';
-import { ControllableTextInput } from './common/ControllableTextInput.js';
-import { searchRepoFiles, FileResource, listRepoFiles } from '../../mcp/resources.js';
+import { EfficientTextInput } from './common/EfficientTextInput.js';
+import { getMCPResources, readMCPResource } from '../../mcp/client.js';
 import { PromptHistoryEntry } from '../prompt-history.js';
+import {
+  readClipboardContent,
+  clipboardImageToContentBlock,
+  formatFileSize,
+  isLargeText,
+  createTextPreview,
+} from '../../utils/clipboard.js';
+import { randomUUID } from 'crypto';
 
 interface InputBoxProps {
-  onSubmit: (value: string, attachedFiles?: string[]) => void;
+  onSubmit: (value: string, attachedFiles?: string[], attachedImages?: ImageAttachment[]) => void;
   disabled?: boolean;
   modeColor?: string;
   value?: string;
@@ -26,6 +34,14 @@ interface InputBoxProps {
   onFilesAttached?: (files: string[]) => void;
   onNavigateHistory?: (direction: 'up' | 'down') => void;
   promptHistory?: PromptHistoryEntry[];
+}
+
+export interface ImageAttachment {
+  id: string;
+  data: string; // base64
+  mediaType: 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp';
+  size: number;
+  name?: string;
 }
 
 export interface InputBoxHandle {
@@ -56,8 +72,10 @@ const PURPLE = '#A855F7';
 const CYAN = '#22D3EE';
 const WHITE = '#FFFFFF';
 const DIM_WHITE = '#9CA3AF';
+const GREEN = '#10B981';
 
 // PERFORMANCE: Memoize component to prevent unnecessary re-renders
+// This component should ONLY re-render when its own props change, not when messages change
 export const InputBox = React.memo(
   React.forwardRef<InputBoxHandle, InputBoxProps>(({
     onSubmit,
@@ -72,11 +90,13 @@ export const InputBox = React.memo(
     const [value, setValue] = useState(externalValue ?? '');
     const [selectedIndex, setSelectedIndex] = useState(0);
     const [attachedFiles, setAttachedFiles] = useState<string[]>([]);
-    const [fileSuggestions, setFileSuggestions] = useState<FileResource[]>([]);
+    const [attachedImages, setAttachedImages] = useState<ImageAttachment[]>([]);
+    const [fileSuggestions, setFileSuggestions] = useState<Array<{ uri: string; name: string; serverName: string }>>([]);
     const [isLoadingFiles, setIsLoadingFiles] = useState(false);
     const [isSearchMode, setIsSearchMode] = useState(false);
     const [preSearchValue, setPreSearchValue] = useState('');
     const [cursorOverride, setCursorOverride] = useState<number | undefined>(undefined);
+    const [pastePreview, setPastePreview] = useState<string | null>(null);
 
     const notifyChange = useCallback((next: string) => {
       if (externalOnChange) {
@@ -117,7 +137,10 @@ export const InputBox = React.memo(
         setFileSuggestions([]);
       },
       getValue: () => value,
-      clearAttachments: () => setAttachedFiles([]),
+      clearAttachments: () => {
+        setAttachedFiles([]);
+        setAttachedImages([]);
+      },
     }), [applyValue, value]);
 
     // Get terminal width for line
@@ -183,16 +206,21 @@ export const InputBox = React.memo(
 
     // PERFORMANCE: Debounce file search to avoid searching on every keystroke
     const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
-    const hasPrefetchedFilesRef = useRef(false);
+    const mcpResourcesCache = useRef<Array<{ uri: string; name: string; serverName: string }> | null>(null);
 
     useEffect(() => {
-      if (hasPrefetchedFilesRef.current) {
+      if (mcpResourcesCache.current) {
         return;
       }
-      hasPrefetchedFilesRef.current = true;
 
-      // Warm cache for repo files to avoid blocking UI on first @-mention
-      listRepoFiles(process.cwd()).catch(() => {
+      // Warm cache for MCP resources to avoid blocking UI on first @-mention
+      getMCPResources().then(resources => {
+        mcpResourcesCache.current = resources.map(r => ({
+          uri: r.uri,
+          name: r.name || r.uri.split('/').pop() || r.uri,
+          serverName: r.serverName,
+        }));
+      }).catch(() => {
         // Ignore errors - we'll try again on-demand
       });
     }, []);
@@ -214,18 +242,36 @@ export const InputBox = React.memo(
       setIsLoadingFiles(true);
       debounceTimerRef.current = setTimeout(async () => {
         try {
-          const files = await searchRepoFiles(atMentionPattern, process.cwd());
-          setFileSuggestions((prev) => {
-            if (prev.length === files.length) {
-              const same = prev.every((prevFile, idx) => prevFile.uri === files[idx]?.uri);
-              if (same) {
-                return prev;
-              }
-            }
-            return files;
-          });
+          // Use cached resources if available, otherwise fetch fresh
+          let allResources = mcpResourcesCache.current;
+          if (!allResources) {
+            const resources = await getMCPResources();
+            allResources = resources.map(r => ({
+              uri: r.uri,
+              name: r.name || r.uri.split('/').pop() || r.uri,
+              serverName: r.serverName,
+            }));
+          }
+
+          // Fuzzy filter resources by name
+          const patternLower = atMentionPattern.toLowerCase();
+          const filtered = patternLower.length === 0
+            ? allResources.slice(0, 50) // Show first 50 if no pattern
+            : allResources.filter(r => {
+                const nameLower = r.name.toLowerCase();
+                // Fuzzy match: all pattern chars must appear in order
+                let patternIdx = 0;
+                for (let i = 0; i < nameLower.length && patternIdx < patternLower.length; i++) {
+                  if (nameLower[i] === patternLower[patternIdx]) {
+                    patternIdx++;
+                  }
+                }
+                return patternIdx === patternLower.length;
+              }).slice(0, 50); // Limit to 50 matches
+
+          setFileSuggestions(filtered);
         } catch (error) {
-          console.error('Failed to search files:', error);
+          console.error('[InputBox] Failed to search MCP resources:', error);
           setFileSuggestions([]);
         }
         setIsLoadingFiles(false);
@@ -319,11 +365,15 @@ export const InputBox = React.memo(
           if (lastAtIndex !== -1) {
             const newValue = value.slice(0, lastAtIndex) + `@${selected.name} `;
             applyValue(newValue, newValue.length);
+            // Extract file path from URI (file:///path -> /path)
+            const filePath = selected.uri.startsWith('file://')
+              ? decodeURIComponent(selected.uri.slice(7))
+              : selected.uri;
             setAttachedFiles(prev => {
-              if (prev.includes(selected.absolutePath)) {
+              if (prev.includes(filePath)) {
                 return prev;
               }
-              return [...prev, selected.absolutePath];
+              return [...prev, filePath];
             });
             setFileSuggestions([]);
             setSelectedIndex(0);
@@ -352,11 +402,14 @@ export const InputBox = React.memo(
       }
 
       if (value.trim() && !disabled) {
-        onSubmit(value, attachedFiles);
+        const imagesToSend = attachedImages.length > 0 ? [...attachedImages] : undefined;
+        onSubmit(value, attachedFiles, imagesToSend);
         applyValue('', 0);
         setSelectedIndex(0);
         setAttachedFiles([]);
+        setAttachedImages([]);
         setFileSuggestions([]);
+        setPastePreview(null);
       }
     }, [
       isSearchMode,
@@ -407,6 +460,81 @@ export const InputBox = React.memo(
     // Handle Tab completion and arrow navigation
     useInput((input, key) => {
       if (disabled) return;
+
+      // Handle Ctrl+V to paste from clipboard
+      if (key.ctrl && input === 'v') {
+        // Handle paste asynchronously
+        readClipboardContent().then(content => {
+          if (content.type === 'image' && content.image) {
+            // Validate image size (5MB limit)
+            const maxSize = 5 * 1024 * 1024; // 5MB
+            if (content.image.size > maxSize) {
+              setPastePreview(`❌ Image too large: ${formatFileSize(content.image.size)} (max ${formatFileSize(maxSize)})`);
+              setTimeout(() => setPastePreview(null), 4000);
+              return;
+            }
+
+            // Save to temporary file and auto-submit read request
+            if (!content.image) return;
+
+            const imageData = content.image;
+            (async () => {
+              try {
+                const { writeFileSync } = await import('fs');
+                const { tmpdir } = await import('os');
+                const { join } = await import('path');
+
+                // Generate temporary filename with timestamp
+                const timestamp = Date.now();
+                const ext = imageData.mediaType.split('/')[1] || 'png';
+                const tempPath = join(tmpdir(), `pasted_image_${timestamp}.${ext}`);
+
+                // Convert base64 to buffer and save
+                const imageBuffer = Buffer.from(imageData.data, 'base64');
+                writeFileSync(tempPath, imageBuffer);
+
+                // Show feedback
+                setPastePreview(`✓ Image pasted (${formatFileSize(imageData.size)}) - reading...`);
+
+                // Auto-submit with read request
+                const readMessage = value.trim()
+                  ? `${value}\n\nplease read this image\n${tempPath}`
+                  : `please read this image\n${tempPath}`;
+
+                // Submit immediately
+                if (!disabled) {
+                  onSubmit(readMessage, attachedFiles.length > 0 ? [...attachedFiles] : undefined, undefined);
+                  applyValue('', 0);
+                  setAttachedFiles([]);
+                  setAttachedImages([]);
+                  setPastePreview(null);
+                }
+              } catch (error) {
+                console.error('Failed to save pasted image:', error);
+                setPastePreview('❌ Failed to save pasted image');
+                setTimeout(() => setPastePreview(null), 3000);
+              }
+            })();
+          } else if (content.type === 'text' && content.text) {
+            // Handle text paste
+            if (isLargeText(content.text)) {
+              // Show preview for large text
+              const preview = createTextPreview(content.text);
+              setPastePreview(`Large text: ${preview}`);
+              // Ask user to confirm
+              applyValue(value + content.text, value.length + content.text.length);
+            } else {
+              // Paste normally for small text
+              applyValue(value + content.text, value.length + content.text.length);
+            }
+          }
+        }).catch(err => {
+          console.error('Paste failed:', err);
+          setPastePreview(`❌ Paste failed: ${err instanceof Error ? err.message : String(err)}`);
+          setTimeout(() => setPastePreview(null), 4000);
+        });
+        return;
+      }
 
       // Handle Ctrl+R to toggle search mode
       if (key.ctrl && input === 'r') {
@@ -462,7 +590,11 @@ export const InputBox = React.memo(
             const lastAtIndex = value.lastIndexOf('@');
             const newValue = value.slice(0, lastAtIndex) + `@${selected.name} `;
             applyValue(newValue, newValue.length);
-            setAttachedFiles((prev) => [...prev, selected.absolutePath]);
+            // Extract file path from URI (file:///path -> /path)
+            const filePath = selected.uri.startsWith('file://')
+              ? decodeURIComponent(selected.uri.slice(7))
+              : selected.uri;
+            setAttachedFiles((prev) => [...prev, filePath]);
             setFileSuggestions([]);
             setSelectedIndex(0);
           }
@@ -544,13 +676,25 @@ export const InputBox = React.memo(
         {/* Input area */}
         <Box paddingX={1}>
           <Text color={lineColor} bold>▶ </Text>
-          <ControllableTextInput
+          <EfficientTextInput
             value={value}
             onChange={(next) => applyValue(next)}
             onSubmit={handleSubmit}
             placeholder={disabled ? 'Waiting...' : isSearchMode ? 'Search prompts (fzf)...' : 'Type a message or /help for commands...'}
             showCursor={!disabled}
-            cursorOverride={cursorOverride}
+            focus={!disabled}
+            cursorOffset={cursorOverride !== undefined ? cursorOverride : value.length}
+            onCursorOffsetChange={(offset) => {
+              // Don't set undefined - always provide a value
+              setCursorOverride(offset);
+            }}
+            onSpecialKey={(input, key) => {
+              // Let parent handle these special keys
+              if (key.upArrow || key.downArrow || key.tab) {
+                return true; // Prevent default - parent will handle
+              }
+              return false; // Allow default processing
+            }}
           />
         </Box>
 
@@ -567,6 +711,27 @@ export const InputBox = React.memo(
                 {file.split('/').pop()}
               </Text>
             ))}
+          </Box>
+        )}
+
+        {/* Attached images indicator */}
+        {attachedImages.length > 0 && (
+          <Box paddingX={1} flexDirection="column">
+            <Text color={PURPLE}>📎 Images ({attachedImages.length}):</Text>
+            {attachedImages.map((img, index) => (
+              <Box key={img.id} paddingLeft={2}>
+                <Text color={DIM_WHITE}>
+                  • {img.name} ({formatFileSize(img.size)})
+                </Text>
+              </Box>
+            ))}
+          </Box>
+        )}
+
+        {/* Paste preview */}
+        {pastePreview && (
+          <Box paddingX={1}>
+            <Text color={CYAN}>✓ {pastePreview}</Text>
           </Box>
         )}
 
@@ -683,4 +848,35 @@ export const InputBox = React.memo(
       </Box>
     );
   }),
+  // Custom comparison function to prevent unnecessary re-renders
+  // NOTE: This only affects parent-triggered re-renders, NOT internal state changes
+  // Internal state changes (like typing) ALWAYS cause re-renders
+  (prevProps, nextProps) => {
+    // Always re-render if these critical props change
+    if (
+      prevProps.disabled !== nextProps.disabled ||
+      prevProps.modeColor !== nextProps.modeColor ||
+      prevProps.value !== nextProps.value
+    ) {
+      return false; // Props changed, re-render
+    }
+
+    // For function props, only re-render if reference changed (they should be memoized with useCallback)
+    // If they're not memoized, they'll change every render and we'll always re-render (expected)
+    if (
+      prevProps.onSubmit !== nextProps.onSubmit ||
+      prevProps.onChange !== nextProps.onChange ||
+      prevProps.onNavigateHistory !== nextProps.onNavigateHistory ||
+      prevProps.onFilesAttached !== nextProps.onFilesAttached
+    ) {
+      return false; // Function references changed, re-render
+    }
+
+    // OPTIMIZATION: Skip promptHistory comparison to prevent re-renders on every message
+    // promptHistory is only used in search mode (Ctrl+P), which is rarely activated
+    // The search mode is triggered by internal state (isSearchMode), so it will work fine
+    // This prevents typing lag in long conversations by blocking unnecessary parent re-renders
+
+    return true; // Props are equal, skip re-render
+  },
 ); // React.memo + forwardRef

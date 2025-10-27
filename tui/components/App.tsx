@@ -7,7 +7,7 @@ import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import { Box, Text, useInput, useApp } from 'ink';
 import { MessageList } from './MessageList.js';
 import { InputBox } from './InputBox.js';
-import type { InputBoxHandle } from './InputBox.js';
+import type { InputBoxHandle, ImageAttachment } from './InputBox.js';
 import { StatusBar } from './StatusBar.js';
 import { Header } from './Header.js';
 import { ConversationList } from './ConversationList.js';
@@ -49,6 +49,7 @@ import { getModeSystemPrompt } from '../mode-prompts.js';
 import { getBackgroundAgent } from '../background-agent.js';
 import { loadHistory, savePrompt, PromptHistoryEntry } from '../prompt-history.js';
 import { filterToolsByMode, getModeToolDescription } from '../../utils/mode-tools.js';
+import { stripImageDataFromMessage } from '../message-utils.js';
 
 type View = 'chat' | 'conversations' | 'agents' | 'config' | 'mcp' | 'models' | 'branches' | 'todos' | 'permissions';
 type AgentMode = 'PLAN' | 'ACT' | 'DEBUG';
@@ -87,6 +88,7 @@ export const App: React.FC<AppProps> = ({ initialConversationId, initialAgentId,
   const [agentMode, setAgentMode] = useState<AgentMode>('PLAN');
   const [autoMode, setAutoMode] = useState(false);
   const [showExitHint, setShowExitHint] = useState(false);
+  const [showShortcutLabels, setShowShortcutLabels] = useState(false); // Zellij-style: toggle labels with Ctrl+?
   const [navigationIndex, setNavigationIndex] = useState<number | null>(null); // null = live mode
   const [isHistoricalView, setIsHistoricalView] = useState(false);
   const [promptHistory, setPromptHistory] = useState<PromptHistoryEntry[]>([]);
@@ -236,6 +238,9 @@ export const App: React.FC<AppProps> = ({ initialConversationId, initialAgentId,
     }
   };
 
+  // Memoize mode color to prevent InputBox re-renders
+  const modeColor = useMemo(() => getModeInfo(agentMode).color, [agentMode]);
+
   // Cycle through agent modes (Tab)
   const cycleMode = () => {
     const modes: AgentMode[] = ['PLAN', 'ACT', 'DEBUG'];
@@ -255,8 +260,8 @@ export const App: React.FC<AppProps> = ({ initialConversationId, initialAgentId,
     setAutoMode(!autoMode);
   };
 
-  // Handle prompt history navigation
-  const handleHistoryNavigation = (direction: 'up' | 'down') => {
+  // Handle prompt history navigation - memoized to prevent InputBox re-renders
+  const handleHistoryNavigation = useCallback((direction: 'up' | 'down') => {
     if (promptHistory.length === 0) return;
 
     const currentInput = inputValueRef.current;
@@ -289,10 +294,16 @@ export const App: React.FC<AppProps> = ({ initialConversationId, initialAgentId,
         }
       }
     }
-  };
+  }, [promptHistory, historyIndex, tempInput]);
 
   // Handle keyboard shortcuts
   useInput((input, key) => {
+    // Ctrl+?: Toggle shortcut labels
+    if (key.ctrl && input === '?') {
+      setShowShortcutLabels(!showShortcutLabels);
+      return;
+    }
+
     // Ctrl+C: Clear input or exit if pressed twice quickly
     if (key.ctrl && input === 'c') {
       const now = Date.now();
@@ -478,18 +489,34 @@ export const App: React.FC<AppProps> = ({ initialConversationId, initialAgentId,
 
   /**
    * Handle user message submission
+   * Memoized to prevent InputBox re-renders
    */
-  const handleSubmit = async (input: string, attachedFiles?: string[]) => {
+  const handleSubmit = useCallback(async (input: string, attachedFiles?: string[], attachedImages?: ImageAttachment[]) => {
     // Handle "exit" command to quit
     if (input.trim().toLowerCase() === 'exit') {
       exit();
       return;
     }
 
-    // Handle commands
+    // Handle commands - but be smart about file paths
+    // Only treat as command if it's a valid command format (not a file path)
     if (input.startsWith('/')) {
-      await handleCommand(input);
-      return;
+      // Known Scout commands
+      const knownCommands = ['/new', '/agent', '/model', '/permissions', '/checkpoint', 
+                            '/restore', '/list', '/mcp', '/compact', '/clear', '/help', '/exit'];
+      
+      // Check if input starts with a known command
+      const isKnownCommand = knownCommands.some(cmd => 
+        input === cmd || input.startsWith(cmd + ' ')
+      );
+      
+      if (isKnownCommand) {
+        await handleCommand(input);
+        return;
+      }
+      
+      // Otherwise, it's likely a file path - treat as regular message content
+      // (e.g., /path/to/file.png, /home/user/image.jpg)
     }
 
     if (!client) {
@@ -506,11 +533,11 @@ export const App: React.FC<AppProps> = ({ initialConversationId, initialAgentId,
     setError(null);
 
     try {
-      // Process attached files and build message content
+      // Process attached files/images and build message content
       let messageContent: string | any[] = input;
 
-      if (attachedFiles && attachedFiles.length > 0) {
-        // Build content array with text and document blocks
+      if ((attachedFiles && attachedFiles.length > 0) || (attachedImages && attachedImages.length > 0)) {
+        // Build content array with text, image, and document blocks
         const contentBlocks: any[] = [
           {
             type: 'text',
@@ -518,28 +545,44 @@ export const App: React.FC<AppProps> = ({ initialConversationId, initialAgentId,
           },
         ];
 
-        // Read and attach files
-        for (const filePath of attachedFiles) {
-          try {
-            const { content, isInRepo } = await readFileResource(filePath, process.cwd());
+        // Add image attachments first
+        if (attachedImages && attachedImages.length > 0) {
+          for (const image of attachedImages) {
+            contentBlocks.push({
+              type: 'image',
+              source: {
+                type: 'base64',
+                media_type: image.mediaType,
+                data: image.data,
+              },
+            });
+          }
+        }
 
-            // Only include files that are in the repo
-            if (isInRepo) {
-              contentBlocks.push({
-                type: 'document',
-                source: {
-                  type: 'text',
-                  data: content,
-                },
-                title: filePath.split('/').pop() || filePath,
-                context: `File: ${filePath}`,
-              });
-            } else {
-              setError(`Skipped file outside repo: ${filePath}`);
+        // Read and attach files
+        if (attachedFiles && attachedFiles.length > 0) {
+          for (const filePath of attachedFiles) {
+            try {
+              const { content, isInRepo } = await readFileResource(filePath, process.cwd());
+
+              // Only include files that are in the repo
+              if (isInRepo) {
+                contentBlocks.push({
+                  type: 'document',
+                  source: {
+                    type: 'text',
+                    data: content,
+                  },
+                  title: filePath.split('/').pop() || filePath,
+                  context: `File: ${filePath}`,
+                });
+              } else {
+                setError(`Skipped file outside repo: ${filePath}`);
+              }
+            } catch (err) {
+              console.error(`Failed to read file ${filePath}:`, err);
+              setError(`Failed to read file: ${filePath}`);
             }
-          } catch (err) {
-            console.error(`Failed to read file ${filePath}:`, err);
-            setError(`Failed to read file: ${filePath}`);
           }
         }
 
@@ -590,8 +633,12 @@ export const App: React.FC<AppProps> = ({ initialConversationId, initialAgentId,
       // Execute query with STATELESS SDK
       // Show messages in REAL-TIME as they stream (users want to see progress!)
       for await (const message of client.queryStream(currentMessages, messageContent, queryOptions)) {
+        // Strip image data from message before storing to prevent memory issues
+        // Images are sent to API but not kept in state (only metadata preserved)
+        const strippedMessage = stripImageDataFromMessage(message);
+
         // Add to collection
-        newMessages.push(message);
+        newMessages.push(strippedMessage);
 
         // Update state IN REAL-TIME so users can see messages as they arrive
         // This is what makes the UI feel responsive!
@@ -662,7 +709,16 @@ export const App: React.FC<AppProps> = ({ initialConversationId, initialAgentId,
       setIsStreaming(false);
       abortControllerRef.current = null;
     }
-  };
+  }, [
+    exit,
+    client,
+    conversation,
+    currentBranch,
+    agentMode,
+    autoMode,
+    isHistoricalView,
+    navigationIndex,
+  ]);
 
   /**
    * Handle TUI commands
@@ -1138,12 +1194,15 @@ export const App: React.FC<AppProps> = ({ initialConversationId, initialAgentId,
               </Box>
             )}
 
+            {/* Tooltip Hints - helpful tips that appear periodically */}
+            <TooltipHints enabled={true} intervalSeconds={45} />
+
             {/* Input Box */}
             <InputBox
               ref={inputBoxRef}
               onSubmit={handleSubmit}
               disabled={isStreaming}
-              modeColor={getModeInfo(agentMode).color}
+              modeColor={modeColor}
               onChange={handleInputChange}
               onNavigateHistory={handleHistoryNavigation}
               promptHistory={promptHistory}
@@ -1239,11 +1298,8 @@ export const App: React.FC<AppProps> = ({ initialConversationId, initialAgentId,
         showExitHint={showExitHint}
       />
 
-      {/* Tooltip Hints - helpful tips that appear periodically */}
-      <TooltipHints enabled={true} intervalSeconds={45} />
-
       {/* Shortcut Bar - zellij-like keyboard shortcuts */}
-      <ShortcutBar view={view} isStreaming={isStreaming} />
+      <ShortcutBar view={view} isStreaming={isStreaming} showLabels={showShortcutLabels} />
     </Box>
   );
 };
