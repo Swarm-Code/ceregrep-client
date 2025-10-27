@@ -1,8 +1,38 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
 [project]
-name = "scout"
+name = "scout-mcp"
 version = "1.1.1"
-description = "Scout MCP server."
-requires-python = ">=3.12.11"
+description = "Scout MCP server - expose Swarm Scout query capabilities to MCP-compatible agents"
+readme = "mcp-server/README.md"
+requires-python = ">=3.10"
+license = { text = "AGPL-3.0" }
+authors = [
+    { name = "Swarm-Code" }
+]
+keywords = ["mcp", "model-context-protocol", "scout", "code-analysis", "agent"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: GNU Affero General Public License v3",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+]
 dependencies = [
     "mcp>=1.0.0",
 ]
+
+[project.urls]
+Homepage = "https://github.com/Swarm-Code/scout"
+Repository = "https://github.com/Swarm-Code/scout"
+Issues = "https://github.com/Swarm-Code/scout/issues"
+
+[project.scripts]
+scout-mcp = "scout_mcp.server:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["mcp-server/scout_mcp"]
