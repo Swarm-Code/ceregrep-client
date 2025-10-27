@@ -10,6 +10,9 @@ import { promisify } from 'util';
 
 const execAsync = promisify(exec);
 
+const CACHE_TTL_MS = 60_000;
+const repoFileCache = new Map<string, { timestamp: number; files: FileResource[] }>();
+
 export interface FileResource {
   uri: string; // file:///absolute/path/to/file.ts
   name: string; // file.ts or relative/path/file.ts
@@ -54,6 +57,13 @@ export async function listRepoFiles(cwd: string = process.cwd()): Promise<FileRe
   const gitRoot = await getGitRoot(cwd);
   if (!gitRoot) {
     return [];
+  }
+
+  const cacheKey = gitRoot;
+  const cached = repoFileCache.get(cacheKey);
+  const now = Date.now();
+  if (cached && now - cached.timestamp < CACHE_TTL_MS) {
+    return cached.files;
   }
 
   try {
@@ -103,11 +113,30 @@ export async function listRepoFiles(cwd: string = process.cwd()): Promise<FileRe
       });
     }
 
+    repoFileCache.set(cacheKey, {
+      timestamp: now,
+      files: resources,
+    });
+
     return resources;
   } catch (error) {
     console.warn('Failed to list repo files:', error);
     return [];
   }
+}
+
+/**
+ * Invalidate cached repo file listing for a given working directory.
+ * Allows callers to refresh when files change.
+ */
+export function invalidateRepoFileCache(cwd: string = process.cwd()): void {
+  void getGitRoot(cwd).then((gitRoot) => {
+    if (gitRoot) {
+      repoFileCache.delete(gitRoot);
+    }
+  }).catch(() => {
+    // ignore errors resolving git root
+  });
 }
 
 /**
@@ -144,7 +173,7 @@ export async function searchRepoFiles(
   const matches = allFiles.filter((file) => fuzzyMatch(file.name, patternLower));
 
   // Sort by relevance (exact match > starts with > contains > fuzzy)
-  return matches.sort((a, b) => {
+  const sorted = matches.sort((a, b) => {
     const aName = a.name.toLowerCase();
     const bName = b.name.toLowerCase();
 
@@ -165,6 +194,8 @@ export async function searchRepoFiles(
 
     return aName.localeCompare(bName);
   });
+
+  return sorted.slice(0, 100);
 }
 
 /**
