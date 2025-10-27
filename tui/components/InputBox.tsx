@@ -708,10 +708,22 @@ export const InputBox = React.memo(
             }}
             onSpecialKey={(input, key) => {
               // Let parent handle these special keys
+              // Navigation and command keys
               if (key.upArrow || key.downArrow || key.tab) {
                 return true; // Prevent default - parent will handle
               }
-              return false; // Allow default processing
+              // Parent shortcuts (Ctrl+X combinations)
+              if (key.ctrl && (input === 'o' || input === 'a' || input === 'h' ||
+                               input === 'l' || input === 'b' || input === 'f' ||
+                               input === 't' || input === 'p' || input === 'm' ||
+                               input === '0' || input === '?' || input === 'd')) {
+                return true; // Let parent handle all Ctrl+X shortcuts
+              }
+              // Shift combinations for mode cycling
+              if (key.shift && key.tab) {
+                return true; // Shift+Tab for auto mode toggle
+              }
+              return false; // Allow default processing for regular input
             }}
           />
         </Box>
