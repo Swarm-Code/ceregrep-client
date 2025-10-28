@@ -260,7 +260,8 @@ export const AgentManager: React.FC<AgentManagerProps> = ({ currentAgentId, onSw
           tools: {},
           mcpServers: {},
         },
-        scope
+        scope,
+        process.cwd()
       );
       await loadAgents();
       setView('list');
