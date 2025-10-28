@@ -98,6 +98,14 @@ export const AgentManager: React.FC<AgentManagerProps> = ({ currentAgentId, onSw
     setLoading(false);
   };
 
+  // Helper function to extract the real agent ID from the list item ID
+  // List items have format "id__global" or "id__project" to ensure unique keys
+  const getAgentId = (itemId: string): string => {
+    if (itemId === '__add__') return itemId;
+    // Remove the scope suffix if present
+    return itemId.replace(/__(?:global|project)$/, '');
+  };
+
   const handleListAction = async (key: string, item?: SelectListItem, index?: number) => {
     switch (key.toLowerCase()) {
       case 'a': // Add new agent
@@ -106,19 +114,21 @@ export const AgentManager: React.FC<AgentManagerProps> = ({ currentAgentId, onSw
 
       case 'd': // Delete agent
         if (item && item.id !== '__add__') {
+          const agentId = getAgentId(item.id);
           setModal({
             show: true,
             type: 'confirm',
             title: 'Delete Agent',
             message: `Are you sure you want to delete "${item.label}"?`,
-            onConfirm: () => deleteAgentHandler(item.id),
+            onConfirm: () => deleteAgentHandler(agentId),
           });
         }
         break;
 
       case 'e': // Export agent
         if (item && item.id !== '__add__') {
-          exportAgentHandler(item.id);
+          const agentId = getAgentId(item.id);
+          exportAgentHandler(agentId);
         }
         break;
 
@@ -131,8 +141,9 @@ export const AgentManager: React.FC<AgentManagerProps> = ({ currentAgentId, onSw
 
       case 'p': // Edit system prompt
         if (item && item.id !== '__add__') {
-          const isGlobal = globalAgents.some(a => a.id === item.id);
-          setSelectedAgentId(item.id);
+          const agentId = getAgentId(item.id);
+          const isGlobal = globalAgents.some(a => a.id === agentId);
+          setSelectedAgentId(agentId);
           setSelectedScope(isGlobal ? 'global' : 'project');
           setView('systemPrompt');
         }
@@ -140,8 +151,9 @@ export const AgentManager: React.FC<AgentManagerProps> = ({ currentAgentId, onSw
 
       case 't': // Configure tools
         if (item && item.id !== '__add__') {
-          const isGlobal = globalAgents.some(a => a.id === item.id);
-          setSelectedAgentId(item.id);
+          const agentId = getAgentId(item.id);
+          const isGlobal = globalAgents.some(a => a.id === agentId);
+          setSelectedAgentId(agentId);
           setSelectedScope(isGlobal ? 'global' : 'project');
           setView('tools');
         }
@@ -149,8 +161,9 @@ export const AgentManager: React.FC<AgentManagerProps> = ({ currentAgentId, onSw
 
       case 'm': // Configure MCP servers
         if (item && item.id !== '__add__') {
-          const isGlobal = globalAgents.some(a => a.id === item.id);
-          setSelectedAgentId(item.id);
+          const agentId = getAgentId(item.id);
+          const isGlobal = globalAgents.some(a => a.id === agentId);
+          setSelectedAgentId(agentId);
           setSelectedScope(isGlobal ? 'global' : 'project');
           setView('mcpServers');
         }
@@ -172,19 +185,20 @@ export const AgentManager: React.FC<AgentManagerProps> = ({ currentAgentId, onSw
       return;
     }
 
+    const agentId = getAgentId(item.id);
     // Check if this is the currently active agent
-    const isActive = item.id === currentAgentId;
+    const isActive = agentId === currentAgentId;
 
     if (isActive) {
       // Active agent: go to edit view
-      const isGlobal = globalAgents.some(a => a.id === item.id);
-      setSelectedAgentId(item.id);
+      const isGlobal = globalAgents.some(a => a.id === agentId);
+      setSelectedAgentId(agentId);
       setSelectedScope(isGlobal ? 'global' : 'project');
       setView('edit');
     } else {
       // Inactive agent: switch to it
       if (onSwitchAgent) {
-        onSwitchAgent(item.id);
+        onSwitchAgent(agentId);
         setMessage(`Switched to agent: ${item.label}`);
         setTimeout(() => setMessage(null), 2000);
         // Stay in list view to show new active state
@@ -308,30 +322,36 @@ export const AgentManager: React.FC<AgentManagerProps> = ({ currentAgentId, onSw
   const getAgentListItems = (): SelectListItem[] => {
     const items: SelectListItem[] = [];
 
-    // Add global agents
-    globalAgents.forEach((agent) => {
-      const isActive = agent.id === currentAgentId;
-      items.push({
-        id: agent.id,
-        label: agent.name,
-        description: agent.description,
-        badge: isActive ? 'ACTIVE' : 'GLOBAL',
-        icon: isActive ? '●' : '',
-        status: isActive ? 'active' : undefined,
-      });
-    });
+    // Track seen agent IDs to prevent duplicates (project scope takes precedence)
+    const seenIds = new Set<string>();
 
-    // Add project agents
+    // Add project agents first (they take precedence over global)
     projectAgents.forEach((agent) => {
+      seenIds.add(agent.id);
       const isActive = agent.id === currentAgentId;
       items.push({
-        id: agent.id,
+        id: `${agent.id}__project`,  // Unique key combining ID and scope
         label: agent.name,
         description: agent.description,
         badge: isActive ? 'ACTIVE' : 'PROJECT',
         icon: isActive ? '●' : '',
         status: isActive ? 'active' : undefined,
       });
+    });
+
+    // Add global agents (skip if already in project)
+    globalAgents.forEach((agent) => {
+      if (!seenIds.has(agent.id)) {
+        const isActive = agent.id === currentAgentId;
+        items.push({
+          id: `${agent.id}__global`,  // Unique key combining ID and scope
+          label: agent.name,
+          description: agent.description,
+          badge: isActive ? 'ACTIVE' : 'GLOBAL',
+          icon: isActive ? '●' : '',
+          status: isActive ? 'active' : undefined,
+        });
+      }
     });
 
     // Add "Add new agent" item
