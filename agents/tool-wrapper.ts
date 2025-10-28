@@ -129,11 +129,28 @@ function createAgentTool(agentId: string, agentName: string, agentDescription: s
 /**
  * Get all agent tools
  * Creates tool wrappers for all available agents (global + project)
+ * Deduplicates by agent ID - project scope agents take precedence
  */
 export async function getAgentTools(): Promise<Tool[]> {
   try {
     const agents = await listAgents();
-    const allAgents = [...agents.global, ...agents.project];
+
+    // Deduplicate by agent ID (project takes precedence over global)
+    const seenIds = new Set<string>();
+    const allAgents: typeof agents.project = [];
+
+    // Add project agents first (they take precedence)
+    agents.project.forEach(agent => {
+      seenIds.add(agent.id);
+      allAgents.push(agent);
+    });
+
+    // Add global agents only if not already in project
+    agents.global.forEach(agent => {
+      if (!seenIds.has(agent.id)) {
+        allAgents.push(agent);
+      }
+    });
 
     // Create tool wrapper for each agent
     const agentTools = allAgents.map(agent =>
